@@ -67,15 +67,21 @@ QLAIM 2(`C:\Users\sisho\Desktop\qlaim2`、GitHub `hacchake/qlaim2`)は機能が�
 5. 保存キー → `nawabari.` にする
 
 ### 済んだこと(2026-09-25)
-- タイトルを NAWABARI(+ナワバリ)、保存キー `nawabari.`、`MODES = ['VS']`(ほかのモードの中身はまだ残っている)
+- タイトルを NAWABARI(+ナワバリ)、保存キー `nawabari.`、`MODES = ['VS']`
 - PARTY を削除(ロビー・画面分割・人間ファイター)。キーコンフィグは1人ぶん `PLAY_KEYS`
-- 線をネオン風に(`inkBand` の白い芯、平面の境界の白い芯は `redrawField`、立体は `lineCiCalc` を白寄りに)
+- 線をネオン風に: `inkBand`(色の帯 + 白い芯)。できあがった線も同じ帯のまま(`drawOwnedLines`、持ち主の色 `lineOwnerHex`)
 - 大きく囲んだときの和柄 `BIG_PATS`(`claimPattern` がコンボの柄か和柄を選ぶ)
+- じゃま役の ON/OFF(`settings.numerin` / `settings.bachikko`、準備画面の「じゃま役」)。ヌメリンなしは狭いほうを塗る `keepCell`
+- 時間制は残機なし(`vsTimeRule()`)。やられてもすぐ戻る、負けたら同じラウンドをやり直し
+- 削除: buddy・図鑑、ZEN・DAILY・エンディング・チュートリアル、オイカケ、導火線、ランキング・名前入力・ゲームオーバー・コンティニュー・シェア、BONUS AREA、地球の地図、Clawd の色、アイテム RAINBOW/SPLASH/PAINT
+- 実績を対戦向けに21個(`ACHV`)。あそんだ記録・あそびかたも対戦向け
+- 決着前10秒の BGM の盛り上げ(`Bgm.climax`: 小節の頭で全音上へ転調・テンポ1.1倍)、逆転の知らせ(`checkLeader`)、順位バーがすべる(`hudAnim`)
+- 結果画面のタイムラプス(`lapse` / `startLapse`。1秒ごとの差分を記録、勝った試合はギャラリーに16枚つける)
 
-### 次にやること
-- ヌメリン・バチッコの ON/OFF を対戦の設定(`MATCH_ITEMS`)に足す
-- TOUR/DAILY/ZEN/単独盤面、buddy・図鑑、エンディング、BONUS、チュートリアル、ランキング、シェアなどを削る
-- 実績を対戦向けに作り直す
+### 次にやること(候補)
+- 中身の整理の残り: エンジンの中に TOUR / 単独盤面 の分岐(`settings.mode` が 'PLANE' などのとき)、ひとり用の `startClear` の流れ、
+  インクの MIX/虹(`settings.ink`、`applyPattern`)が残っている。テストがこれらを使っているので、テストを VS に書き換えながら消す
+- CLAUDE.md の「QLAIM 2 の仕組み」以下の古い説明の整理
 
 ## 進め方の提案
 1. 保存キーを `nawabari.` に変え、タイトルを NAWABARI にする
