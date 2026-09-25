@@ -34,9 +34,7 @@ for (const md of (globalThis.FUZZ_MODES || ['VS','VS','VS','VS','PLANE','CUBE','
         if (state === 'play') update(1/60);
         else if (state === 'clear' && stTimer > 1) nextLevel();
         else if (state === 'ready' && stTimer > 2) setState('play');
-        else if (state === 'entry') entryNext();
         else if (state === 'vsres' && stTimer > 1.5) onAction();
-        else if (state === 'over') { if (stTimer > 1) break; }
         if (f % 97 === 0) render();
       } catch (e) { problems.push(md + ' f' + f + ' ' + e.stack.split(NL).slice(0,4).join(' | ')); break; }
       if (state === 'play' && claimed !== initOpen - countOpen() - trail.length - rivalTrailCells()) {

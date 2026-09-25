@@ -498,26 +498,6 @@ settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016); player.invul
 }
 
 
-// ---- 37) ランキングと名前入力 ----
-{
-  settings.mode = 'TETRA'; ranks.TETRA = [];
-  startGame(); stTimer = 2; tickMeta(0.016);
-  score = 5000; lives = 0; player.invuln = 0; death(); for (let i = 0; i < 60 && deathTimer > 0; i++) update(1/30);
-  assert('ランキング入りで名前入力へ', state === 'entry', state);
-  const ev = key => ({ key, repeat: false, preventDefault() {} });
-  onKeyDown(ev('ArrowUp'));
-  const c0 = entry.name[0];
-  onKeyDown(ev('z')); onKeyDown(ev('q')); onKeyDown(ev('z'));
-  assert('名前を決めて登録', state === 'over' && rankOf('TETRA')[0].s === 5000 && entry.rank === 0, JSON.stringify(rankOf('TETRA')));
-  assert('文字キーで直接入力', rankOf('TETRA')[0].n[1] === 'Q' && rankOf('TETRA')[0].n[0] === c0);
-  for (const sc of [100, 9000, 300, 50, 7000, 20]) addRank('ZZZ', sc, 1);
-  const r = rankOf('TETRA');
-  assert('上位5件を高い順に保持', r.length === 5 && r[0].s === 9000 && r[4].s === 100 && !qualifies(90) && qualifies(20000), r.map(e => e.s).join(','));
-  let err = null; try { render(); setState('entry'); render(); } catch (e) { err = e.stack; }
-  assert('ランキング・名前入力の描画が例外なし', !err, err);
-}
-
-
 // ---- 39) スクリーンショット ----
 assert('スクリーンショットはtoBlobが無い環境では何もしない', saveShot() === false);
 
@@ -530,22 +510,7 @@ assert('スクリーンショットはtoBlobが無い環境では何もしない
 }
 
 
-// ---- 42) コンティニュー ----
-{
-  settings.mode = 'PLANE'; ranks.PLANE = [{ n: 'TOP', s: 99999999, a: 99 }, { n: 'TOP', s: 99999998, a: 99 }, { n: 'TOP', s: 99999997, a: 99 }, { n: 'TOP', s: 99999996, a: 99 }, { n: 'TOP', s: 99999995, a: 99 }];
-  startGame(); initLevel(5); level = 5; setState('play'); score = 1234;
-  lives = 0; player.invuln = 0; death(); for (let i = 0; i < 60 && deathTimer > 0; i++) update(1/30);
-  assert('ゲームオーバーでコンティニュー受付', state === 'over' && canContinue());
-  stTimer = 1; onAction();
-  assert('Zで同じエリアから続ける(残機回復・スコアは0から)', state === 'ready' && level === 5 && lives === settings.lives && score === 0 && continues === 1);
-  setState('play'); lives = 0; player.invuln = 0; death(); for (let i = 0; i < 60 && deathTimer > 0; i++) update(1/30);
-  stTimer = 1; giveUp();
-  assert('Xでやめるとカウントダウン終了', !canContinue());
-  onAction();
-  assert('その後Zでタイトルへ', state === 'title');
-  let err = null; try { setState('over'); stTimer = 2; render(); } catch (e) { err = e.stack; }
-  assert('コンティニュー表示が例外なし', !err, err);
-}
+
 
 
 // ---- 43) 実績 ----
@@ -625,23 +590,7 @@ assert('スクリーンショットはtoBlobが無い環境では何もしない
 assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 
 
-// ---- 49) BONUS AREA ----
-{
-  settings.mode = 'PLANE'; startGame(); level = 5; initLevel(5); setState('play');
-  assert('AREA5はBONUS AREA(SPARXなし・制限時間あり)', bonusT > 0 && sparxes.length === 0, bonusT);
-  player.invuln = 99; held.fast = true; steps(0, -1, 20); steps(-1, 0, 20); steps(0, 1, 30);
-  const pct = percent(), sc = score;
-  for (let i = 0; i < 60 * 45 && state === 'play'; i++) update(1/60);
-  assert('時間切れでクリア、占領率に応じたボーナス', state === 'clear' && lastBonus >= Math.round(pct * CONFIG.BONUS_PTS), 'bonus=' + lastBonus + ' pct=' + pct.toFixed(1));
-  // 描いている最中に時間切れ → 残機は減らず線だけ消える
-  level = 5; initLevel(5); setState('play'); player.invuln = 99; held.fast = true; steps(0, -1, 5);
-  const lv0 = lives; bonusT = 0.01; update(1/60);
-  assert('描画中の時間切れでも残機は減らない', state === 'clear' && lives === lv0 && countCells(TRAIL) === 0 && !player.drawing);
-  nextLevel();
-  assert('次のエリアは通常(制限時間なし)', level === 6 && bonusT === 0 && sparxes.length > 0);
-  let err = null; try { level = 10; initLevel(10); setState('ready'); render(); } catch (e) { err = e.stack; }
-  assert('BONUS AREAのREADY表示が例外なし', !err, err);
-}
+
 
 
 // ---- 50) Clawdの色 ----
@@ -704,13 +653,7 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 }
 
 
-// ---- 55) 名前入力で M / C も文字として入る ----
-{
-  settings.mode = 'OCTA'; ranks.OCTA = []; startGame(); score = 4321; startEntry();
-  const ev = key => ({ key, repeat: false, preventDefault() {} });
-  onKeyDown(ev('m')); onKeyDown(ev('c')); onKeyDown(ev('9'));
-  assert('名前入力でMとCが打てる', state === 'over' && rankOf('OCTA')[0].n === 'MC9', rankOf('OCTA')[0] && rankOf('OCTA')[0].n);
-}
+
 
 
 // ---- 56) ワープの入場 ----
@@ -749,15 +692,7 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 }
 
 
-// ---- 59) 結果の共有 ----
-{
-  settings.mode = 'KLEIN'; score = 3210; level = 4; continues = 1;
-  const tx = resultText();
-  assert('共有の文章に盤面・スコア・URL', tx.includes('クラインの壺') && tx.includes('3210') && tx.includes('AREA 4') && tx.includes(SHARE_URL), tx);
-  assert('共有できない環境でも落ちない', shareResult() === 'none');
-  setState('over'); stTimer = 20; let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('ゲームオーバー画面(共有ボタン)の描画', !err && shareRect && shareRect.w > 0, err);
-}
+
 
 
 // ---- 60) QIXの突進 ----
@@ -772,9 +707,6 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
     for (let i = 0; i < 120; i++) updateQixes(1/60);
     assert(md + ': 突進後もQIXは空き地', qixes.every(openAt));
   }
-  settings.mode = 'PLANE'; startGame(); level = 5; initLevel(5); setState('play');
-  updateQix(qixes[0], 0.1);
-  assert('AREA5(BONUS)では突進しない', !(qixes[0].dash > 0) && qixes[0].dashCD == null);
 }
 
 
@@ -883,13 +815,7 @@ assert('全盤面に豆知識がある', Object.keys(CONFIG.SURF).every(k => SUR
 }
 
 
-// ---- 72) もう一度 ----
-{
-  settings.mode = 'PLANE'; startGame(); score = 10;
-  setState('over'); stTimer = 1;
-  onKeyDown({ key: 'r', repeat: false, preventDefault() {} });
-  assert('Rですぐもう一度', state === 'ready' && level === 1 && score === 0);
-}
+
 
 
 // ---- 73) 振動 ----
@@ -917,12 +843,10 @@ assert('全盤面に豆知識がある', Object.keys(CONFIG.SURF).every(k => SUR
 
 // ---- 75) 追加の実績 ----
 {
-  delete achvGot.nearmiss; delete achvGot.bonus50;
+  delete achvGot.nearmiss;
   settings.mode = 'PLANE'; startGame();
   for (let i = 0; i < 5; i++) { nearMissT = 0; nearMiss(); }
   assert('ニアミス5回で「ギリギリの達人」', !!achvGot.nearmiss);
-  level = 5; initLevel(5); setState('play'); claimed = Math.ceil(initOpen * 0.55); startClear(false);
-  assert('BONUS AREAで50%以上で「ボーナスハンター」', !!achvGot.bonus50);
   setState('achv'); let err = null; try { render(); } catch (e) { err = e.stack; }
   assert('実績一覧の描画', !err && ACHV.length >= 10, err || ACHV.length);
 }
@@ -940,12 +864,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 78) ハイスコア更新の表示 ----
-{
-  settings.mode = 'ICOSA'; startGame(); score = startHi + 1; setState('over'); stTimer = 20;
-  let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('ハイスコア更新の表示が例外なし', !err && score > startHi, err);
-}
+
 
 
 // ---- 79) 音楽の強化 ----
@@ -998,12 +917,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 84) コンティニューするとスコアは0から(ハイスコアは残る) ----
-{
-  settings.mode = 'PLANE'; startGame(); score = 123456; saveHi(); setState('over'); stTimer = 0;
-  continueGame();
-  assert('コンティニューでスコア0', score === 0 && hiScore >= 123456, score + ' / ' + hiScore);
-}
+
 
 
 // ---- 85) いろいろな色のインク・虹・アイテム ----

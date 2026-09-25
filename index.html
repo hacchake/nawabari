@@ -169,10 +169,6 @@ const CONFIG = {
   BIG_CLAIM_PTS: 120,   // BIG CLAIM ボーナス(1%あたり)
   NEAR_MISS_PTS: 150,   // QIXが描きかけの線をかすめたときのボーナス
   READY_TIME: 1.4,      // AREA表示(READY)の時間(秒)
-  CONTINUE_TIME: 10,    // ゲームオーバー後、コンティニューできる秒数
-  BONUS_EVERY: 5,       // このエリアごとに BONUS AREA(5,10,15…)
-  BONUS_TIME: 40,       // BONUS AREA の制限時間(秒)
-  BONUS_PTS: 200,       // BONUS AREA の占領率1%あたりのボーナス
 
 
   /* -- アイテム・コンボ ---------------------------------------- */
@@ -728,43 +724,6 @@ function theme() {
 // ハイスコアは盤面モードごと(v2のハイスコアは PLANE に引き継ぐ)
 const hiScores = Object.assign({ PLANE: store.get('qlaim.hi', 0) | 0 }, store.get('qlaim.hi3', {}));
 function hiOf(mode) { return hiScores[mode] | 0; }
-// ランキング: 盤面モードごとに上位5件 { n:名前3文字, s:スコア, a:到達エリア }
-const RANK_N = 5;
-const ranks = store.get('qlaim.rank', {});
-function rankOf(mode) { return ranks[mode] || []; }
-function qualifies(sc) { const r = rankOf(modeKey()); return sc > 0 && (r.length < RANK_N || sc > r[r.length - 1].s); }
-// 登録して、その順位(0始まり)を返す
-function addRank(name, sc, area) {
-  const key = modeKey(), r = rankOf(key).concat([{ n: name, s: sc, a: area }]);
-  r.sort((a, b) => b.s - a.s);
-  ranks[key] = r.slice(0, RANK_N);
-  store.set('qlaim.rank', ranks);
-  return ranks[key].findIndex(e => e.n === name && e.s === sc);
-}
-// 名前入力
-const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-*';
-const entry = { name: ['C', 'L', 'D'], pos: 0, rank: -1 };
-let entryRects = [];
-function startEntry() {
-  const nm = (settings.name || 'CLD').split('');
-  entry.name = [nm[0] || 'A', nm[1] || 'A', nm[2] || 'A'];
-  entry.pos = 0; entry.rank = -1;
-  setState('entry');
-}
-function entryChar(dir) {
-  const i = NAME_CHARS.indexOf(entry.name[entry.pos]);
-  entry.name[entry.pos] = NAME_CHARS[(i + dir + NAME_CHARS.length) % NAME_CHARS.length];
-  Snd.blip();
-}
-function entryNext() {
-  if (entry.pos < 2) { entry.pos++; Snd.blip(); return; }
-  const nm = entry.name.join('');
-  settings.name = nm; saveSettings();
-  entry.rank = addRank(nm, score, level);
-  Snd.extend();
-  setState('over');
-}
-
 /* ---- 実績 ----
    達成すると画面上部に表示。OPTIONS の「実績を見る」で一覧 */
 const ACHV = [
@@ -783,7 +742,6 @@ const ACHV = [
   { id:'stars',    name:'星をつかむ',     txt:'星型3種をすべてクリア' },
   { id:'all',      name:'全制覇',         txt:'すべての盤面をクリア' },
   { id:'nearmiss', name:'ギリギリの達人', txt:'1ゲームでニアミスを5回' },
-  { id:'bonus50',  name:'ボーナスハンター', txt:'BONUS AREAで占領率50%以上' },
   { id:'world',    name:'世界一周',       txt:'球(地球)で7つの大陸をすべて見つける' },
 ];
 const achvGot = store.get('qlaim.ach', {});
@@ -2090,12 +2048,9 @@ let combo = 0, comboT = 0;      // コンボ数 / 次のコンボまでの残り
 let guarded = false;            // SHIELD でミスを防いだ最中
 let areaTime = 0;               // このエリアの経過時間
 let pauseSel = 0;               // ポーズメニューの選択行
-let continues = 0;              // このゲームでコンティニューした回数
 let startHi = 0;                // ゲーム開始時のハイスコア(更新したか判定)
 let demoT = 0, demoLv = 1;      // タイトルのデモ: 背景の盤面を巡らせる
-let bonusT = 0;                 // BONUS AREA の残り時間
 let heartT = 0;                 // 心臓の鼓動の間隔
-function isBonus(lv) { lv = lv || level; return !hasRivals() && lv % CONFIG.BONUS_EVERY === 0; }
 // 自動軽量化: プレイ中に重い(1フレーム28ms超が続く)ときは発光を切る。設定は保存しない
 const perf = { avg: 1 / 60, slowT: 0, lite: false };
 function watchPerf(rawDt) {
@@ -2733,9 +2688,7 @@ function initLevel(lv) {
     if (state !== 'title') cam.D = 9;   // ワープ: 遠くから飛び込んでくる(updateCamera が 3.4 へ寄せる)
   }
 
-  const bonus = isBonus(lv) && state !== 'title';
-  bonusT = bonus ? CONFIG.BONUS_TIME : 0;
-  const spd = CONFIG.QIX_SPEED * diff().qix * Math.pow(CONFIG.QIX_ACCEL, lv - 1) * surf.def.qixSpeed * (bonus ? 0.6 : 1);
+  const spd = CONFIG.QIX_SPEED * diff().qix * Math.pow(CONFIG.QIX_ACCEL, lv - 1) * surf.def.qixSpeed;
   qixes = [];
   const nq = !numerinOn() ? 0 : lv >= CONFIG.TWO_QIX_FROM && !hasRivals() ? 2 : 1;
   for (let k = 0; k < nq; k++) qixes.push(makeQix(k, nq, spd));
@@ -2745,10 +2698,10 @@ function initLevel(lv) {
   }
 
   sparxes = [];
-  const ns = bonus || !bachikkoOn() ? 0 : Math.min(4, surf.def.sparxStart + ((lv - 1) >> 1));   // BONUS AREA は SPARX なし
+  const ns = !bachikkoOn() ? 0 : Math.min(4, surf.def.sparxStart + ((lv - 1) >> 1));
   for (let i = 0; i < ns; i++) spawnSparx(i % 2 ? 1 : -1, surf.def.sparxWait + i * 1.5 * (surf.def.sparxWait > 0));
   sparxTimer = CONFIG.SPARX_INTERVAL * diff().interval;
-  if (bonus || !bachikkoOn()) sparxTimer = Infinity;
+  if (!bachikkoOn()) sparxTimer = Infinity;
   // 最初からある壁(外枠・HOME)
   baseA = new Uint8Array(surf.N);
   for (let i = 0; i < surf.N; i++) if (grid[i] === WALL) baseA[i] = 1;
@@ -3380,9 +3333,8 @@ function updateItems(dt) {
   if (comboT > 0) comboT -= dt;
   itemTimer -= dt;
   if (itemTimer <= 0) {
-    // BONUS AREA はどんどん出る
-    itemTimer = bonusT > 0 ? 3 : CONFIG.ITEM_INTERVAL;
-    if (items.length < (bonusT > 0 ? 4 : CONFIG.ITEM_MAX)) spawnItem();
+    itemTimer = CONFIG.ITEM_INTERVAL;
+    if (items.length < CONFIG.ITEM_MAX) spawnItem();
   }
   for (const it of items) it.t += dt;
   items = items.filter(it => it.t < CONFIG.ITEM_LIFE);
@@ -3423,7 +3375,7 @@ function updateQix(q, dt) {
   // 突進: 予告(warn)のあと自機へ向きを変えて速く進む
   let rate = 1;
   q.warn = false;
-  if (level >= CONFIG.QIX_DASH_FROM && state === 'play' && bonusT <= 0) {
+  if (level >= CONFIG.QIX_DASH_FROM && state === 'play') {
     if (q.dashCD == null) q.dashCD = rand(4, 7);
     if (q.dash > 0) { q.dash -= dt; rate = CONFIG.QIX_DASH_RATE; }
     else {
@@ -4440,15 +4392,11 @@ function vsEnd(playerOut) {
   if (vsWin) { startClear(false); artSaved = false; setState('vsres'); }        // 得点・記録は勝ちと同じ。画面は結果表
   else { Snd.stopDraw(); Bgm.stop(); Snd.over(); sealRemaining(); setState('vsres'); }
 }
-// 負け: Z / タップで残機を1つ使ってやり直し(なければゲームオーバー)
+// 負け: Z / タップで同じラウンドをやり直し
 function vsRetry() {
   if (!vsTimeRule()) lives--;
   areaMiss++;
-  if (lives < 0) {
-    saveHi(); entry.rank = -1; saveStats();
-    if (qualifies(score)) startEntry(); else setState('over');
-    return;
-  }
+  if (lives < 0) { saveHi(); saveStats(); backToTitle(); return; }
   initLevel(level); setState('ready'); Bgm.play(bgmName()); Snd.ready();
 }
 function drawRivals(t) {
@@ -4677,13 +4625,9 @@ function applyDeath() {
   if (trailStart >= 0) { player.c = trailStart; player.prev = -1; }
   snapPlayerToBoundary();
   if (lives < 0 && isStock()) { lives = 0; player.out = true; vsEnd(true); return; }   // 残機制: 脱落 = この試合は負け
-  if (lives < 0) {
-    saveHi();
-    entry.rank = -1;
-    saveStats();
-    if (qualifies(score)) startEntry(); else setState('over');
-    Bgm.stop();
-    Snd.over();
+  if (lives < 0) {                                   // (ナワバリバトルでは来ない)
+    saveHi(); saveStats();
+    Snd.over(); backToTitle();
   } else {
     player.invuln = CONFIG.INVULN;
   }
@@ -4701,7 +4645,6 @@ function startGame() {
   hiScore = hiOf(modeKey());      // 日付が変わっていても今日の記録を使う
   startHi = hiScore;
   stats.games++; saveStats();
-  continues = 0;
   nearMissN = 0;
   nextExtend = CONFIG.EXTEND_FIRST;
   setState('ready');              // 先に READY にしてから盤面を作る(ワープ入場する)
@@ -4713,8 +4656,7 @@ function startGame() {
 
 function startClear(split) {
   wasSplit = !!split;
-  lastBonus = (bonusT > 0 || isBonus() ? Math.round(percent() * CONFIG.BONUS_PTS) : 0)
-            + Math.max(0, Math.round((percent() - target()) * 150))
+  lastBonus = Math.max(0, Math.round((percent() - target()) * 150))
             + level * 500
             + (split ? CONFIG.SPLIT_BONUS + (level - 1) * CONFIG.SPLIT_BONUS_LV : 0);
   score += lastBonus;
@@ -4733,21 +4675,6 @@ function startClear(split) {
   artSaved = false;
   sayLine('clear', 2.5, true);
 }
-
-// コンティニュー: 同じエリアの最初から、残機を戻して続ける(スコアは0から。ハイスコアが積み上がらないように)
-function canContinue() { return state === 'over' && stTimer < CONFIG.CONTINUE_TIME; }
-function continueGame() {
-  continues++;
-  saveHi();
-  score = 0;
-  lives = settings.lives;
-  player.shield = false;
-  initLevel(level);
-  setState('ready');
-  Bgm.play(bgmName());
-  Snd.ready();
-}
-function giveUp() { if (canContinue()) { stTimer = CONFIG.CONTINUE_TIME; Snd.blip(); } }
 
 /* ---- ギャラリー: クリアした盤面を「作品」として小さな絵で残す(最新24枚) ----
    平面は焼き込んだフィールドを、立体はクリア後に引いた画面の真ん中を切り取って保存する。
@@ -4868,7 +4795,6 @@ function drawHelp(t) {
 
 function checkClearAchv(split) {
   unlock('first');
-  if (isBonus() && percent() >= 50) unlock('bonus50');
   if (split) unlock('split');
   if (areaMiss === 0) unlock('nomiss');
   if (areaTime < 60) unlock('speed');
@@ -4926,7 +4852,6 @@ function onAction() {
     else if (isStock()) { initLevel(level); setState('ready'); Bgm.play(bgmName()); Snd.ready(); }   // 残機制はもう一度(ゲームオーバーなし)
     else vsRetry();
   }
-  else if (state === 'over'  && stTimer > 0.8) { if (canContinue()) continueGame(); else backToTitle(); }
 }
 
 function doPause() {
@@ -5104,8 +5029,6 @@ function updateWorld(dt, stepped) {
   // 残機0(最後の1機)のときは心臓の鼓動
   if (lives === 0 && !vsTimeRule()) { heartT -= dt; if (heartT <= 0) { Snd.heart(); heartT = 0.95; } } else heartT = 0;
   stats.time += dt;
-  // BONUS AREA: 時間切れでクリア(それまでの占領率でボーナス)
-  if (bonusT > 0) { bonusT -= dt; if (bonusT <= 0) { bonusT = 0.001; cancelTrail(); startClear(false); bonusT = 0; return; } }
   // ナワバリバトル: 時間切れで勝負
   if (pendingEnds.length) { const fs = pendingEnds; pendingEnds = []; for (const f of fs) f(); if (state !== 'play') return; }
   if (hasRivals() && !isStock()) { vsT -= dt; if (vsT <= 0) { vsT = 0; vsEnd(); return; } }
@@ -5388,7 +5311,6 @@ function drawStatus() {
     ctx.fillStyle = col; ctx.fillText(txt, x + 7, y + 13);
     x += w + 6;
   };
-  if (bonusT > 0) pill('BONUS ' + Math.ceil(bonusT) + 's', '#ff9ee8');
   if (slowT > 0) pill('S SLOW ' + Math.ceil(slowT), ITEMS.slow.col);
   if (starT > 0) pill('★ x2 ' + Math.ceil(starT), ITEMS.star.col);
   if (ink.rainbowT > 0) pill('≋ RAINBOW ' + Math.ceil(ink.rainbowT), hslHex(blinkT * 140, 88, 66));
@@ -5977,7 +5899,7 @@ function renderHUD() {
   if (!vsTimeRule()) for (let i = 0; i < Math.min(lives, 6); i++) drawClawd(W - 62 - i * 16, 30, 1);   // 時間制は残機なし
   ctx.fillStyle = '#6d7ba8';
   ctx.font = "bold 10px 'Courier New', monospace";
-  ctx.fillText(settings.diff + (continues ? '  CONT×' + continues : ''), W - 52, 50);
+  ctx.fillText(settings.diff, W - 52, 50);
 
   // ポーズボタン(タップ可)
   if (state === 'play' || state === 'ready' || state === 'pause') {
@@ -6194,7 +6116,7 @@ function renderOverlay() {
       ctx.fillRect(0, FIELD_Y, W, H - FIELD_Y);
       ctx.fillStyle = t.accent;
       ctx.font = "bold 44px 'Courier New', monospace";
-      ctx.fillText((bonusT > 0 ? 'BONUS ' : '') + 'AREA ' + level, W / 2, H / 2 - 40);
+      ctx.fillText('AREA ' + level, W / 2, H / 2 - 40);
       ctx.fillStyle = '#cdd8ff';
       ctx.font = "bold 18px 'Courier New', monospace";
       ctx.fillText('── ' + surf.def.label + ' ──', W / 2, H / 2 - 6);
@@ -6224,11 +6146,6 @@ function renderOverlay() {
       if (qixes.length > 1) {
         ctx.fillStyle = '#ffd76b';
         ctx.fillText('ヌメリン 2体 ─ 線で分断すると即クリア!', W / 2, y);
-        y += 24;
-      }
-      if (bonusT > 0) {
-        ctx.fillStyle = '#ff9ee8';
-        ctx.fillText('BONUS AREA ─ ' + CONFIG.BONUS_TIME + '秒で好きなだけ囲め! 敵はヌメリンだけ', W / 2, y);
         y += 24;
       }
     }
@@ -6303,79 +6220,6 @@ function renderOverlay() {
     return;
   }
 
-  if (state === 'entry') {
-    panel(90, 250, W - 180, 330);
-    ctx.fillStyle = '#ffd76b';
-    ctx.font = "bold 28px 'Courier New', monospace";
-    ctx.fillText('NEW RECORD!', W / 2, 300);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = "bold 17px 'Courier New', monospace";
-    ctx.fillText('SCORE ' + score + '   AREA ' + level, W / 2, 334);
-    ctx.fillStyle = '#8fa3d9';
-    ctx.font = "13px 'Courier New', monospace";
-    ctx.fillText('名前を入れてください', W / 2, 364);
-    entryRects = [];
-    for (let i = 0; i < 3; i++) {
-      const x = W / 2 + (i - 1) * 70, y = 432, sel = i === entry.pos;
-      entryRects.push({ x: x - 30, y: y - 50, w: 60, h: 100, idx: i });
-      ctx.fillStyle = sel ? t.accent : '#aab6dd';
-      ctx.font = "bold 48px 'Courier New', monospace";
-      ctx.fillText(entry.name[i], x, y + 16);
-      if (sel) {
-        ctx.font = "bold 16px 'Courier New', monospace";
-        ctx.fillText('▲', x, y - 34); ctx.fillText('▼', x, y + 44);
-        if (blinkOn) ctx.fillRect(x - 20, y + 24, 40, 3);
-      }
-    }
-    entryRects.push({ x: W / 2 - 60, y: 506, w: 120, h: 40, idx: 3 });
-    ctx.strokeStyle = '#3a4a7a'; ctx.lineWidth = 1.5; ctx.strokeRect(W / 2 - 60, 506, 120, 40);
-    ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 16px 'Courier New', monospace";
-    ctx.fillText(entry.pos < 2 ? 'つぎへ' : 'OK', W / 2, 532);
-    ctx.fillStyle = '#6d7ba8'; ctx.font = "12px 'Courier New', monospace";
-    ctx.fillText('↑↓ 文字 / ←→ 位置 / Z 決定', W / 2, 566);
-    return;
-  }
-
-  if (state === 'over') {
-    const r = rankOf(modeKey());
-    panel(90, 250, W - 180, 370);
-    shareRect = { x: W / 2 - 150, y: 586, w: 300, h: 26 };
-    ctx.strokeStyle = '#3a6a7a'; ctx.lineWidth = 1.5; ctx.strokeRect(shareRect.x, shareRect.y, shareRect.w, shareRect.h);
-    ctx.fillStyle = '#9dffea'; ctx.font = "bold 13px 'Courier New', monospace";
-    ctx.fillText('結果をシェア [S]   もう一度 [R]', W / 2, 604);
-    ctx.fillStyle = '#ff5c8a';
-    ctx.font = "bold 34px 'Courier New', monospace";
-    ctx.fillText('GAME OVER', W / 2, 300);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = "bold 17px 'Courier New', monospace";
-    ctx.fillText('SCORE ' + score + '   HI ' + hiScore, W / 2, 334);
-    if (score > startHi && blinkOn) {
-      ctx.fillStyle = '#ffd76b'; ctx.font = "bold 14px 'Courier New', monospace";
-      ctx.fillText('★ NEW HI SCORE! ★', W / 2, 352);
-    }
-    ctx.fillStyle = '#8fa3d9';
-    ctx.font = "bold 13px 'Courier New', monospace";
-    ctx.fillText('── ' + modeLabel(settings.mode) + ' ランキング ──', W / 2, 368);
-    for (let i = 0; i < RANK_N; i++) {
-      const e = r[i], y = 398 + i * 26, me = i === entry.rank;
-      ctx.fillStyle = me ? (blinkOn ? '#ffd76b' : '#ffffff') : '#cdd8ff';
-      ctx.font = "bold 16px 'Courier New', monospace";
-      ctx.fillText(e ? (i + 1) + '. ' + e.n + '  ' + String(e.s).padStart(7, '0') + '  AREA ' + e.a : (i + 1) + '. ---', W / 2, y);
-    }
-    if (canContinue()) {
-      const left = Math.ceil(CONFIG.CONTINUE_TIME - stTimer);
-      ctx.fillStyle = '#ffd76b';
-      ctx.font = "bold 20px 'Courier New', monospace";
-      ctx.fillText('CONTINUE?  ' + left, W / 2, 548);
-      ctx.fillStyle = '#cdd8ff';
-      ctx.font = "bold 12px 'Courier New', monospace";
-      ctx.fillText('Z / タップ = AREA ' + level + ' から続ける   X = やめる', W / 2, 568);
-    } else if (stTimer > 0.8 && blinkOn) {
-      ctx.fillStyle = '#cdd8ff';
-      ctx.font = "bold 15px 'Courier New', monospace";
-      ctx.fillText('Z / タップ でタイトルへ', W / 2, 555);
-    }
-  }
 }
 
 /* ---------------- メインループ ---------------- */
@@ -6420,10 +6264,8 @@ function onKeyDown(e) {
     if (PLAY_KEYS.f.includes(e.code)) { held.fast = true; e.preventDefault(); return; }
   }
 
-  if ((k === 'c' || k === 'C') && state !== 'entry') { saveShot(); e.preventDefault(); return; }
-  if ((k === 's' || k === 'S') && state === 'over') { shareResult(); e.preventDefault(); return; }
-  if ((k === 'r' || k === 'R') && state === 'over' && stTimer > 0.5) { startGame(); e.preventDefault(); return; }   // すぐもう一度
-  if ((k === 'm' || k === 'M') && state !== 'entry') {   // 名前入力中は文字として使う
+  if (k === 'c' || k === 'C') { saveShot(); e.preventDefault(); return; }
+  if (k === 'm' || k === 'M') {
     const m = Snd.toggleMute();
     floats.push({ x: W / 2, y: H / 2, txt: m ? 'MUTE' : 'SOUND ON', t: 1.0, col: '#cdd8ff' });
     e.preventDefault(); return;
@@ -6482,18 +6324,6 @@ function onKeyDown(e) {
     e.preventDefault(); return;
   }
 
-  // 名前入力
-  if (state === 'entry') {
-    const d = KEYDIR[k];
-    if (d === 'up') entryChar(1);
-    else if (d === 'down') entryChar(-1);
-    else if (d === 'left') { entry.pos = Math.max(0, entry.pos - 1); Snd.blip(); }
-    else if (d === 'right') { entry.pos = Math.min(2, entry.pos + 1); Snd.blip(); }
-    else if (k === 'z' || k === 'Z' || k === ' ' || k === 'Enter') entryNext();
-    else if (/^[a-zA-Z0-9]$/.test(k)) { entry.name[entry.pos] = k.toUpperCase(); entryNext(); }
-    e.preventDefault(); return;
-  }
-
   // ポーズメニュー
   if (state === 'pause') {
     if (KEYDIR[k] === 'up')   { pauseSel = (pauseSel + PAUSE_ITEMS.length - 1) % PAUSE_ITEMS.length; Snd.blip(); }
@@ -6512,9 +6342,8 @@ function onKeyDown(e) {
     if (state !== 'play' && state !== 'ready' && state !== 'pause') onAction();
     e.preventDefault(); return;
   }
-  if (k === 'x' || k === 'X' || k === 'Shift' || k === 'k' || (k === 'Escape' && state === 'over')) {
+  if (k === 'x' || k === 'X' || k === 'Shift' || k === 'k') {
     held.slow = true;
-    if (state === 'over') { giveUp(); e.preventDefault(); return; }
     if (state === 'title') openOptions();
     else if (state !== 'play' && state !== 'ready' && state !== 'pause') onAction();
     e.preventDefault(); return;
@@ -6542,29 +6371,10 @@ if (document.addEventListener) document.addEventListener('visibilitychange', () 
   else if (state !== 'pause') Bgm.resume();
 });
 
-// 結果の共有: スマホは共有メニュー、PC はクリップボードへ
-const SHARE_URL = 'https://hacchake.github.io/qlaim/';
-function resultText() {
-  const day = '';
-  return 'QLAIM ─ ' + modeLabel(settings.mode) + day + '\nSCORE ' + score + '  AREA ' + level
-       + (continues ? '  (CONT×' + continues + ')' : '') + '\n' + SHARE_URL;
-}
-let shareRect = null;
-function shareResult() {
-  const text = resultText();
-  const done = msg => { floats.push({ x: W / 2, y: 230, txt: msg, t: 1.6, col: '#9dffea' }); Snd.select(); };
-  try {
-    if (typeof navigator !== 'undefined' && navigator.share) { navigator.share({ text }).catch(() => {}); return 'share'; }
-    if (typeof navigator !== 'undefined' && navigator.clipboard) { navigator.clipboard.writeText(text).then(() => done('結果をコピーしました'), () => done('コピーできませんでした')); return 'copy'; }
-  } catch (e) {}
-  done('この環境では共有できません');
-  return 'none';
-}
-
 // スクリーンショット: いまの画面を PNG で保存
 function saveShot() {
   if (!cv.toBlob) return false;
-  const d = new Date(), name = 'qlaim-' + todayStr(d) + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0') + '.png';
+  const d = new Date(), name = 'nawabari-' + todayStr(d) + '-' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0') + '.png';
   cv.toBlob(b => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b); a.download = name; a.click();
@@ -6717,20 +6527,11 @@ cv.addEventListener('pointerdown', e => {
     dragStart = p; dragDir = null;            // なぞり操作の開始
     return;
   }
-  if (state === 'entry') {
-    const r = entryRects.find(q => inRect(p, q));
-    if (!r) return;
-    if (r.idx === 3) { entry.pos = 2; entryNext(); return; }
-    entry.pos = r.idx;
-    entryChar(p.y < r.y + r.h / 2 ? 1 : -1);    // 文字の上半分で次、下半分で前の文字
-    return;
-  }
   if (state === 'pause') {
     const row = pauseRects.find(r => inRect(p, r));
     if (row) pauseChoose(row.idx);
     return;
   }
-  if (state === 'over' && inRect(p, shareRect)) { shareResult(); return; }
   if (isResult()) {
     if (stTimer > 1.0 && inRect(p, viewBtn)) { resHide = !resHide; Snd.select(); return; }
     resPtrs.set(e.pointerId, p);
