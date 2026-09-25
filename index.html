@@ -2656,10 +2656,11 @@ function lineCi(c) {
   return lineCache[c];
 }
 function lineCiCalc(c) {
+  if (lineOwnerHex(c)) { const o = ownA[c], r = o === 1 ? null : rivals[o - 2]; return TEAMC_CI0 + (r ? r.team : 0) * 4; }
   const ns = lineNeighbors(c);
   if (!ns.length) return 3;
-  if (isBoundary(c)) { const mi = mixCi(ns[0], WHITE_NO, 7, 0); return mi >= 0 ? mi : 3; }
-  const mi = mixCi(ns[c % ns.length], WHITE_NO, 6, 0);     // ネオン: 陣地のあいだの線は白っぽく光らせて境目をはっきり
+  if (isBoundary(c)) { const mi = mixCi(ns[0], WHITE_NO, 4, 0); return mi >= 0 ? mi : 3; }
+  const mi = mixCi(ns[c % ns.length], WHITE_NO, 1, 0);
   return mi >= 0 ? mi : 3;
 }
 
@@ -2832,11 +2833,12 @@ function redrawField() {
   fctx.stroke();
   // 陣地: セルごとに少し大きめの円を重ねる → ふちが丸くインクっぽくなる。色ごとにまとめて塗る
   const paths = {}, add = (key, x, y, r) => { (paths[key] = paths[key] || new Path2D()).moveTo(x + r, y); paths[key].arc(x, y, r, 0, Math.PI * 2); };
-  const gloss = new Path2D(), dim = new Path2D(), lit = new Path2D();
+  const gloss = new Path2D(), dim = new Path2D(), lit = new Path2D(), ownedL = [];
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
     const i = idx(x, y);
     if (grid[i] !== WALL) continue;
     const c = colA[i], cx = x * CS + CS / 2, cy = y * CS + CS / 2;
+    if (!c && lineOwnerHex(i)) { ownedL.push(i); continue; }   // ネオンの帯であとで描く
     if (!c || c === HOME_COL) {
       const lh = c ? null : lineHex(i, x, y);
       if (!lh) add('line', cx, cy, CS * 0.55);
@@ -2868,22 +2870,8 @@ function redrawField() {
   fctx.restore();
   fctx.fillStyle = 'rgba(255,255,255,0.35)'; fctx.fill(gloss);
   if (paths.line) { fctx.fillStyle = t.line; fctx.fill(paths.line); }
-  // ネオン: 陣地のあいだの線の真ん中に白い芯(となりと色が似ていても境目がはっきり見える)
-  const core = new Path2D(), isLine = i => grid[i] === WALL && colA[i] === 0 && !baseA[i];
-  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-    const i = idx(x, y);
-    if (!isLine(i)) continue;
-    const cx = x * CS + CS / 2, cy = y * CS + CS / 2;
-    let solo = true;
-    if (x + 1 < GW && isLine(i + 1)) { core.moveTo(cx, cy); core.lineTo(cx + CS, cy); solo = false; }
-    if (y + 1 < GH && isLine(i + GW)) { core.moveTo(cx, cy); core.lineTo(cx, cy + CS); solo = false; }
-    if (solo && !(x > 0 && isLine(i - 1)) && !(y > 0 && isLine(i - GW))) { core.moveTo(cx + CS * 0.2, cy); core.arc(cx, cy, CS * 0.2, 0, Math.PI * 2); }
-  }
-  fctx.save();
-  fctx.lineCap = 'round'; fctx.lineJoin = 'round';
-  fctx.strokeStyle = 'rgba(255,255,255,0.28)'; fctx.lineWidth = CS * 0.62; fctx.stroke(core);
-  fctx.strokeStyle = 'rgba(255,255,255,0.95)'; fctx.lineWidth = Math.max(1, CS * 0.26); fctx.stroke(core);
-  fctx.restore();
+  // ネオン: できあがった線も、描いていたときと同じ帯(チームの色 + 真ん中の白い芯)のまま
+  drawOwnedLines(fctx, ownedL, c => ({ x: (c % GW) * CS + CS / 2, y: ((c / GW) | 0) * CS + CS / 2 }), CS * 1.35);
 }
 
 // クリア時: 残った空き地を薄く塗って「封鎖」感を出す(判定には影響しない。立体面は描画側で処理)
@@ -6702,16 +6690,47 @@ function drawInkTrail(t) {
   inkBand(path, col, w);
 }
 // インクの帯(ネオン風): うっすら色の光 + 暗いふち + インク + 真ん中の白い芯。点滅はしない
-function inkBand(path, col, w) {
-  ctx.save();
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  ctx.globalAlpha = 0.22; ctx.strokeStyle = col; ctx.lineWidth = w * 2.2; ctx.stroke(path);
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = shade(col, 0.45); ctx.lineWidth = w + 2; ctx.stroke(path);
-  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(path);
-  ctx.strokeStyle = mixHex(col, '#ffffff', 0.6); ctx.lineWidth = w * 0.5; ctx.stroke(path);   // 芯のまわりのにじみ
-  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.2, w * 0.24); ctx.stroke(path);     // 白い芯
-  ctx.restore();
+// 描いている線も、できあがった線も同じ見た目(g = 描き先。省略すると画面)
+function inkBand(path, col, w, g) {
+  g = g || ctx;
+  g.save();
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  g.globalAlpha = 0.22; g.strokeStyle = col; g.lineWidth = w * 2.2; g.stroke(path);
+  g.globalAlpha = 1;
+  g.strokeStyle = shade(col, 0.45); g.lineWidth = w + 2; g.stroke(path);
+  g.strokeStyle = col; g.lineWidth = w; g.stroke(path);
+  g.strokeStyle = mixHex(col, '#ffffff', 0.6); g.lineWidth = w * 0.5; g.stroke(path);   // 芯のまわりのにじみ
+  g.strokeStyle = '#ffffff'; g.lineWidth = Math.max(1.2, w * 0.24); g.stroke(path);     // 白い芯
+  g.restore();
+}
+// できあがった線の持ち主の色(ナワバリバトルのみ。持ち主がいない線 = 最初の壁・中立は null)
+function lineOwnerHex(c) {
+  if (!isVS() || grid[c] !== WALL || colA[c] !== 0 || baseA[c]) return null;
+  const o = ownA[c];
+  if (o === 1) return teamHex(0);
+  const r = o >= 2 && o !== OWN_NEUTRAL ? rivals[o - 2] : null;
+  return r ? teamHex(r.team) : null;
+}
+// できあがった線をネオンの帯で描く。pos(c) = 画面の位置、ok(c) = 描いてよいマス
+function drawOwnedLines(g, cells, pos, w, ok) {
+  const paths = {};
+  for (const c of cells) {
+    const hx = lineOwnerHex(c);
+    if (!hx || (ok && !ok(c))) continue;
+    const p = pos(c), P = paths[hx] || (paths[hx] = new Path2D());
+    let solo = true;
+    for (let k = 0; k < 4; k++) {
+      const n = surf.nb[c * 4 + k];
+      if (n < 0 || !lineOwnerHex(n) || (ok && !ok(n))) continue;
+      solo = false;
+      if (n < c) continue;                            // 同じつなぎ目を2回描かない
+      const q = pos(n);
+      if (Math.hypot(q.x - p.x, q.y - p.y) > w * 6) continue;   // 継ぎ目の向こう側へは線を引かない
+      P.moveTo(p.x, p.y); P.lineTo(q.x, q.y);
+    }
+    if (solo) { P.moveTo(p.x, p.y); P.lineTo(p.x + 0.01, p.y); }
+  }
+  for (const hx in paths) inkBand(paths[hx], hx, w, g);
 }
 function mixHex(a, b, k) { return hexOf(mixRgb(rgbOf(a), rgbOf(b), k)); }
 
@@ -6867,6 +6886,12 @@ function render3D(t) {
     }
     if (cur >= 0) ctx.fill();
     ctx.globalAlpha = 1;
+  }
+  // できあがった線: 描いていたときと同じネオンの帯(表を向いているマスだけ)
+  if (isVS()) {
+    const lc = [];
+    for (let c = 0; c < S.N; c++) if (frontA[c] && grid[c] === WALL && colA[c] === 0 && claimAt[c] <= now) lc.push(c);
+    drawOwnedLines(ctx, lc, c => S.screenOf(c), 5.5, c => frontA[c] && claimAt[c] <= now);
   }
 
   drawInkTrail(t);
