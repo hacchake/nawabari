@@ -5,7 +5,6 @@ const root = require('path').join(__dirname, '..');
 const h = fs.readFileSync(root + '/index.html', 'utf8');
 const m = h.match(/<script>([\s\S]*?)<\/script>/);
 const body = String.raw`
-settings.tutor = true;
 const DIRS = ['up','down','left','right'];
 const NL = String.fromCharCode(10);
 let problems = [], frames = 0;

@@ -521,47 +521,13 @@ settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016); player.invul
 }
 
 
-// ---- 38) DAILY(今日の3面) ----
-{
-  const a = dailyList('20260924'), b = dailyList('20260924'), c = dailyList('20260925');
-  assert('DAILY: 同じ日は同じ3面・別の日は別', a.join() === b.join() && a.join() !== c.join() && new Set(a).size === 3 && !a.includes('PLANE'), a.join() + ' / ' + c.join());
-  settings.mode = 'DAILY';
-  const d = dailyList();
-  assert('DAILY: エリア1〜3が今日の3面', surfaceFor(1) === d[0] && surfaceFor(2) === d[1] && surfaceFor(3) === d[2] && surfaceFor(4) === d[0]);
-  assert('DAILY: 記録は日付つきのキー', modeKey() === 'DAILY:' + todayStr());
-  startGame(); score = 777; saveHi();
-  assert('DAILY: ハイスコアは今日の分として保存', hiOf('DAILY:' + todayStr()) === 777 && hiOf('DAILY') === 0);
-  setState('title'); let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('DAILY: タイトル描画', !err, err);
-}
-
-
-// ---- 39) チュートリアル ----
-{
-  settings.tutor = false; settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016);
-  assert('初回はチュートリアル開始', tutorStep === 0);
-  held.fast = false; player.invuln = 99;
-  steps(-1, 0, 1);
-  assert('歩くと次のヒント', tutorStep === 1);
-  steps(0, -1, 2);
-  assert('線を引くと次のヒント', tutorStep === 2);
-  steps(-1, 0, 2); steps(0, 1, 5);
-  assert('囲むと次のヒント', tutorStep === 3);
-  for (let i = 0; i < 400 && tutorStep >= 0; i++) update(1/60);
-  assert('最後のヒントは時間で終わり、以後出ない', tutorStep === -1 && settings.tutor === true);
-  startGame();
-  assert('2回目はチュートリアルなし', tutorStep === -1);
-  let err = null; settings.tutor = false; startGame(); stTimer = 2; tickMeta(0.016);
-  try { render(); } catch (e) { err = e.stack; }
-  assert('チュートリアル描画が例外なし', !err, err);
-  settings.tutor = true; tutorStep = -1;
-  assert('スクリーンショットはtoBlobが無い環境では何もしない', saveShot() === false);
-}
+// ---- 39) スクリーンショット ----
+assert('スクリーンショットはtoBlobが無い環境では何もしない', saveShot() === false);
 
 
 // ---- 40) SEEKER ----
 {
-  settings.mode = 'PLANE'; settings.tutor = true;
+  settings.mode = 'PLANE';
   startGame(); initLevel(3);
   assert('AREA3までSEEKERなし', seekers.length === 0);
   initLevel(4); setState('play');
@@ -647,7 +613,7 @@ settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016); player.invul
 
 // ---- 44) 年輪模様とズーム ----
 {
-  settings.mode = 'CUBE'; settings.tutor = true; startGame(); stTimer = 2; tickMeta(0.016); player.invuln = 99;
+  settings.mode = 'CUBE'; startGame(); stTimer = 2; tickMeta(0.016); player.invuln = 99;
   for (let i = 0; i < 8; i++) stepK(0); for (let i = 0; i < 4; i++) stepK(1);
   cam.D = 3.4; const D0 = cam.D; for (let i = 0; i < 60; i++) tickMeta(1/60);
   assert('線を引いている間はカメラが引く', cam.D > D0 + 0.2, D0.toFixed(2) + '→' + cam.D.toFixed(2));
@@ -698,7 +664,7 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 
 // ---- 49) BONUS AREA ----
 {
-  settings.mode = 'PLANE'; settings.tutor = true; startGame(); level = 5; initLevel(5); setState('play');
+  settings.mode = 'PLANE'; startGame(); level = 5; initLevel(5); setState('play');
   assert('AREA5はBONUS AREA(SPARX/SEEKERなし・制限時間あり)', bonusT > 0 && sparxes.length === 0 && seekers.length === 0, bonusT);
   player.invuln = 99; held.fast = true; steps(0, -1, 20); steps(-1, 0, 20); steps(0, 1, 30);
   const pct = percent(), sc = score;
@@ -742,21 +708,7 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 }
 
 
-// ---- 52) ZENモード ----
-{
-  settings.mode = 'ZEN'; startGame(); level = 6; initLevel(6); setState('play');
-  assert('ZEN: SPARX・SEEKERなし', sparxes.length === 0 && seekers.length === 0);
-  player.invuln = 0; const l0 = lives; death();
-  assert('ZEN: ミスにならない', deathTimer <= 0 && lives === l0);
-  held.fast = false; stepK(0); stepK(0);
-  for (let i = 0; i < 300; i++) updateFuse(1/30, false);
-  assert('ZEN: 導火線なし', !fuse.lit && player.drawing);
-  score = 99999; saveHi();
-  assert('ZEN: 記録しない', !qualifies(99999) && !hiScores.ZEN);
-  assert('ZEN: BONUS AREAなし', !isBonus(5));
-  const np = particles.length; stepK(0); stepK(0);
-  assert('描くとき光の粒がこぼれる', particles.length > np);
-}
+
 
 
 // ---- 53) あそんだ記録 ----
@@ -938,18 +890,6 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 }
 
 
-// ---- 68) TOUR 1周でエンディング ----
-{
-  settings.mode = 'TOUR'; startGame(); level = CONFIG.TOUR.length; initLevel(level); setState('play');
-  claimed = Math.ceil(initOpen * 0.8); startClear(false); stTimer = 1; onAction();
-  assert('TOURの最後をクリアするとエンディング', state === 'ending' && !!achvGot.tourall);
-  let err = null; try { stTimer = 5; render(); for (let i = 0; i < 30; i++) updateParticles(1/30); } catch (e) { err = e.stack; }
-  assert('エンディングの描画が例外なし', !err, err);
-  onAction();
-  assert('Zで2周目(AREA 23 = 平面から)', state === 'ready' && level === CONFIG.TOUR.length + 1 && surf.key === 'PLANE', level + ' ' + surf.key);
-}
-
-
 // ---- 69) RAINBOW ----
 {
   achvGot.tourall = 'x'; settings.skin = 'RAINBOW';
@@ -981,10 +921,9 @@ assert('全盤面に豆知識がある', Object.keys(CONFIG.SURF).every(k => SUR
 }
 
 
-// ---- 72) もう一度・DAILYの日付 ----
+// ---- 72) もう一度 ----
 {
-  settings.mode = 'DAILY'; startGame(); score = 10;
-  assert('DAILYの共有文に日付', /\d{4}\/\d{2}\/\d{2}/.test(resultText()), resultText());
+  settings.mode = 'PLANE'; startGame(); score = 10;
   setState('over'); stTimer = 1;
   onKeyDown({ key: 'r', repeat: false, preventDefault() {} });
   assert('Rですぐもう一度', state === 'ready' && level === 1 && score === 0);
@@ -1400,7 +1339,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   startGame(); setState('play'); fakeArea(10, 60); const lv0 = lives;
   vsEnd(); assert('せまいと負け', state === 'vsres' && !vsWin);
   let err = null; try { render(); } catch (e) { err = e.stack; } assert('負け画面の描画', !err, err);
-  stTimer = 2; onAction(); assert('負けたら残機を1つ使ってやり直し', lives === lv0 - 1 && state === 'ready');
+  stTimer = 2; onAction(); assert('負けたら(時間制は残機を使わずに)やり直し', lives === lv0 && state === 'ready');
   err = null; try { setState('play'); render(); } catch (e) { err = e.stack; } assert('VSの描画(CPU・バー)', !err, err);
   assert('VSの自機は赤チーム(赤系で揺らぐ)', inkHex() === TEAM_SHADES[0][0] && TEAM_SHADES[0].includes(palHex(inkNo(1))));
   assert('VSのCPUは2ラウンドごとに増えて7人まで', vsCpuCount(1) === 3 && vsCpuCount(3) === 4 && vsCpuCount(20) === 7);
@@ -1663,6 +1602,19 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   assert('ヌメリンがいないときは広い空き地を残す', n === countCells(OPEN));
   settings.numerin = 'ON'; settings.bachikko = 'ON'; settings.stageSel = 'TOUR';
   startGame(); assert('ONに戻すとヌメリンが出る', qixes.length === 1);
+}
+
+// ---- 106) 時間制は残機なし ----
+{
+  settings.mode = 'VS'; settings.vsRule = 'TIME'; startGame(); setState('play');
+  const l0 = lives; player.invuln = 0;
+  for (let k = 0; k < 8; k++) { death('テスト'); while (deathTimer > 0) update(1 / 60); player.invuln = 0; }
+  assert('時間制: 何度やられてもゲームオーバーにならない', state === 'play' && lives === l0);
+  { let b = 0; for (let i = 0; i < surf.N && b < 200; i++) if (grid[i] === OPEN) { grid[i] = WALL; ownA[i] = 2; b++; } claimed += b; recountAreas(); } vsEnd(); stTimer = 2; onAction();
+  assert('時間制: 負けても同じラウンドをやり直し', state === 'ready' && lives === l0 && level === 1);
+  let only = true; for (let i = 0; i < 300; i++) if (pickItemKind() === 'life') only = false;
+  assert('時間制: 1UP は出ない', only);
+  let err = null; try { setState('play'); render(); } catch (e) { err = e.stack; } assert('時間制のHUD', !err, err);
 }
 
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
