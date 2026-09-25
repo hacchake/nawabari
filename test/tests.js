@@ -1506,5 +1506,43 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   settings.stageSel = 'TOUR'; gallery = []; setState('title');
 }
 
+// ---- 110) タイムラプス中も回せる ----
+{
+  settings.mode = 'VS'; settings.stageSel = 'CUBE'; startGame(); setState('play'); player.invuln = 99;
+  for (let i = 0; i < 60 * 15 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); }
+  if (state === 'play') vsEnd();
+  stTimer = 2; startLapse();
+  const R0 = cam.R.slice();
+  onKeyDown({ key: 'ArrowLeft', preventDefault() {} }); for (let i = 0; i < 20; i++) { blinkT += 1 / 60; tickMeta(1 / 60); } releaseDir('left');
+  assert('タイムラプス中: 矢印で回る(再生は止まらない)', !!lapsePlay && cam.R.some((v, i) => Math.abs(v - R0[i]) > 1e-3));
+  resDrag = { x: 100, y: 300, moved: true }; endResDrag();
+  assert('タイムラプス中: ドラッグして離しても止まらない', !!lapsePlay && state === 'vsres');
+  resDrag = { x: 100, y: 300, moved: false }; endResDrag();
+  assert('タイムラプス中: 動かさずにタップすると止まる(次へは進まない)', !lapsePlay && state === 'vsres');
+  settings.stageSel = 'TOUR';
+}
+
+
+// ---- 111) 陣地が確定したときの演出(広さで段階) ----
+{
+  assert('段階: 1%=0 / 2%=1 / 6%=2 / 15%=3', claimTier(1) === 0 && claimTier(2) === 1 && claimTier(6) === 2 && claimTier(15) === 3);
+  settings.mode = 'VS'; settings.stageSel = 'PLANE'; startGame(); setState('play');
+  const cells = n => { const out = []; for (let i = 0; i < surf.N && out.length < n; i++) if (grid[i] === OPEN) out.push(i); return out; };
+  rings = []; particles = []; floats = [];
+  assert('小さく囲んだときは演出なし', claimFx(cells(Math.floor(initOpen * 0.01)), teamHex(0), true) === 0 && rings.length === 0);
+  const t3 = claimFx(cells(Math.ceil(initOpen * 0.13)), teamHex(0), true);
+  assert('13%: 「超ナワバリ!」輪6重・しぶき・インクの雨・揺れ', t3 === 3 && rings.length === 6 && particles.filter(q => q.ink).length > 120 && floats.some(f => /超ナワバリ/.test(f.txt)) && (shakeT > 0 || !settings.shake));
+  rings = []; floats = [];
+  const tc = claimFx(cells(Math.ceil(initOpen * 0.06)), teamHex(1), false, rivals[0].name);
+  assert('CPU は1段低い(6% で段階1)', tc === 1 && rings.length === 2 && floats.some(f => f.txt.includes(rivals[0].name)));
+  let err = null; try { for (let i = 0; i < 30; i++) { updateParticles(1 / 30); updateFloats(1 / 30); } render(); } catch (e) { err = e.stack; }
+  assert('演出の描画(遅れて出る輪・大きな文字)', !err, err);
+  // 立体でも
+  settings.stageSel = 'SPHERE'; startGame(); setState('play'); render();
+  err = null; try { claimFx(cells(Math.ceil(initOpen * 0.13)), teamHex(0), true); render(); } catch (e) { err = e.stack; }
+  assert('立体でも演出が出る', !err && rings.length > 0, err);
+  settings.stageSel = 'TOUR'; shakeT = 0;
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);

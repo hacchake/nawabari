@@ -3049,6 +3049,7 @@ function closeTrail() {
   const pat = pickPattern({ drawTime: blinkT - (player.drawT || blinkT), pct: gained / initOpen * 100 });
   lastPat = pat;
   if (isVS()) {                                        // ナワバリバトル: コンボか大きく囲むと柄(色はチームのまま)
+    claimFx(newCells.concat(trail), teamHex(0), true);
     const tp = claimPattern(newCells, combo, player.c);
     noteWagara(tp);
     if (tp) { const P0 = playerScreen(); floats.push({ x: P0.x, y: P0.y - 40, txt: TEAM_PATS[tp], t: 1.4, col: teamHex(0) }); }
@@ -4049,6 +4050,7 @@ function rivalClose(r) {
   }
   // コンボ: 続けて囲むと柄が出る
   r.combo = r.comboT > 0 ? r.combo + 1 : 0; r.comboT = CONFIG.COMBO_TIME;
+  claimFx(got, teamHex(r.team), false, r.name);
   const tp = claimPattern(got, r.combo, r.c);
   if (tp) { const sp = surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS }; floats.push({ x: sp.x, y: sp.y - 30, txt: r.name + ' ' + TEAM_PATS[tp], t: 1.4, col: teamHex(r.team) }); }
   // 囲んだアイテム: 上塗りはそのファイターのもの。ほかは消える
@@ -4921,7 +4923,7 @@ function drawLapseHud() {
   ctx.fillText('▶ タイムラプス', gx - 6, gy - 9);
   ctx.strokeStyle = 'rgba(157,255,234,0.5)'; ctx.beginPath(); ctx.moveTo(px(T), gy); ctx.lineTo(px(T), gy + gh); ctx.stroke();
   ctx.textAlign = 'center'; ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 12px 'Courier New', monospace";
-  ctx.fillText('どれかのキー / タップ でとめる', W / 2, H - 12);
+  ctx.fillText(surf.is3D ? 'ドラッグ / 矢印で回す・タップ / Z でとめる' : 'タップ / Z でとめる', W / 2, H - 12);
 }
 
 /* ---- あそびかた(ヘルプ)。タイトルの H キー、ポーズメニューから ---- */
@@ -5588,10 +5590,11 @@ function render() {
     ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
   }
   for (const r of rings) {
+    if (r.t < 0) continue;                             // 少し遅れて出る輪
     ctx.globalAlpha = 1 - r.t;
     ctx.strokeStyle = r.col;
-    ctx.lineWidth = 3 + 6 * (1 - r.t);
-    ctx.beginPath(); ctx.arc(r.x, r.y, 12 + r.t * 460, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = (3 + 6 * (1 - r.t)) * (r.w || 1);
+    ctx.beginPath(); ctx.arc(r.x, r.y, 12 + r.t * (r.R || 460), 0, Math.PI * 2); ctx.stroke();
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -5604,8 +5607,12 @@ function render() {
   for (const f of floats) {
     ctx.globalAlpha = Math.min(1, f.t);
     ctx.fillStyle = f.col;
-    ctx.font = (f.big ? "bold 24px" : "bold 14px") + " 'Courier New', monospace";
-    ctx.fillText(f.txt, clamp(f.x, 40, W - 40), clamp(f.y, FIELD_Y + 16, H - 8));
+    if (f.T == null) f.T = f.t;
+    const sz = f.size ? f.size * (0.7 + 0.3 * Math.min(1, (f.T - f.t) / 0.25)) : 0;
+    ctx.font = (sz ? "bold " + Math.round(sz) + "px" : f.big ? "bold 24px" : "bold 14px") + " 'Courier New', monospace";
+    const fx = sz ? clamp(f.x, sz * f.txt.length * 0.32, W - sz * f.txt.length * 0.32) : clamp(f.x, 40, W - 40), fy = clamp(f.y, FIELD_Y + 16 + sz, H - 8);
+    if (sz) { ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(4, sz * 0.2); ctx.strokeStyle = 'rgba(4,6,16,0.85)'; ctx.strokeText(f.txt, fx, fy); }   // 大きな文字は暗いふちで読みやすく
+    ctx.fillText(f.txt, fx, fy);
   }
   ctx.globalAlpha = 1;
 
@@ -5632,6 +5639,46 @@ function drawBloom() {
   ctx.globalAlpha = 0.22; ctx.drawImage(bloom1, 0, 0, W, H);
   ctx.globalAlpha = 0.30; ctx.drawImage(bloom2, 0, 0, W, H);
   ctx.restore();
+}
+
+/* ---- 陣地が確定したときの演出: 一度に囲んだ広さで段階が上がる(光らせる・点滅はしない) ----
+   1: 1.5%〜 輪2重・インクのしぶき・「+x.x%」 / 2: 5%〜「ビッグ!」輪4重・揺れ / 3: 12%〜「超ナワバリ!」輪6重・インクの雨・大きく揺れる
+   CPU が囲んだときは1段低く(自分の演出が目立つように) */
+const CLAIM_FX = [1.5, 5, 12];
+function claimTier(pct) { let k = 0; for (const v of CLAIM_FX) if (pct >= v) k++; return k; }
+function claimFx(cells, col, mine, name) {
+  if (!cells.length || !initOpen || state !== 'play') return 0;
+  const pct = cells.length / initOpen * 100, tier = Math.max(0, claimTier(pct) - (mine ? 0 : 1));
+  if (!tier) return 0;
+  // まん中(画面上): 塗ったマスを間引いて平均。立体は見えているマスだけ
+  const step = Math.max(1, Math.floor(cells.length / 240)), pts = [];
+  for (let i = 0; i < cells.length; i += step) {
+    const c = cells[i];
+    if (surf.is3D && visA.length === surf.N && !visA[c]) continue;
+    pts.push(surf.screenOf(c));
+  }
+  let cx = W / 2, cy = (FIELD_Y + H) / 2;
+  if (pts.length) { cx = pts.reduce((a, p) => a + p.x, 0) / pts.length; cy = pts.reduce((a, p) => a + p.y, 0) / pts.length; }
+  // 輪: チームの色で、少しずつずらして何重にも
+  const nR = [0, 2, 4, 6][tier];
+  for (let i = 0; i < nR; i++) rings.push({ x: cx, y: cy, t: -i * 0.12, col, R: 300 + tier * 160, w: 1 + tier * 0.4 });
+  // インクのしぶき: 塗ったところから外へ
+  const nD = [0, 22, 50, 90][tier];
+  for (let i = 0; i < nD; i++) {
+    const p = pts.length ? pick(pts) : { x: cx, y: cy }, a = Math.atan2(p.y - cy, p.x - cx) + rand(-0.6, 0.6), sp = rand(60, 150 + tier * 60);
+    particles.push({ x: p.x, y: p.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, t: rand(0.5, 1.1), col, ink: true, r: rand(2, 3 + tier) });
+  }
+  // インクの雨(いちばん上の段だけ): 画面の上からチームの色がふってくる
+  if (tier >= 3) for (let i = 0; i < 70; i++)
+    particles.push({ x: rand(10, W - 10), y: FIELD_Y + rand(-30, 30), vx: rand(-15, 15), vy: rand(120, 300), t: rand(1.2, 2.2), col, ink: true, r: rand(2, 4.5) });
+  // 文字
+  const txt = (tier >= 3 ? '超ナワバリ!  ' : tier >= 2 ? 'ビッグ!  ' : '') + (mine ? '' : name + ' ') + '+' + pct.toFixed(1) + '%';
+  floats.push({ x: cx, y: cy, txt, t: 1.4 + tier * 0.3, col, size: [0, 22, 30, 40][tier] });
+  // 揺れ・音
+  if (tier >= 2 && settings.shake) shakeT = Math.max(shakeT, tier >= 3 ? 0.45 : 0.22);
+  if (mine) { if (tier >= 3) { Snd.big(); Snd.extend(); buzz(120, 0.9); } else if (tier >= 2) { Snd.big(); buzz(60, 0.5); } }
+  else if (tier >= 2) Snd.big();
+  return tier;
 }
 
 /* ---- 光の演出(点滅はしない) ----
@@ -6521,7 +6568,7 @@ function onKeyDown(e) {
     else if (k === 'x' || k === 'X' || k === 'Escape') { setState(matchFrom); Snd.select(); }
     e.preventDefault(); return;
   }
-  if (lapsePlay) { endLapse(false); e.preventDefault(); return; }       // タイムラプス中はどのキーでもとめる
+  if (lapsePlay && !KEYDIR[k]) { endLapse(false); e.preventDefault(); return; }   // タイムラプス中: 矢印は回す、ほかのキーはとめる
   if ((k === 't' || k === 'T') && canLapse() && stTimer > 1.0) { startLapse(); e.preventDefault(); return; }
   if ((k === 'v' || k === 'V') && isResult() && stTimer > 1.0) { resHide = !resHide; Snd.select(); e.preventDefault(); return; }
   if (state === 'help') {
@@ -6774,9 +6821,8 @@ cv.addEventListener('pointerdown', e => {
     return;
   }
   if (isResult()) {
-    if (lapsePlay) { endLapse(false); return; }
     if (stTimer > 1.0 && canLapse() && inRect(p, lapseBtn)) { startLapse(); return; }
-    if (stTimer > 1.0 && inRect(p, viewBtn)) { resHide = !resHide; Snd.select(); return; }
+    if (stTimer > 1.0 && !lapsePlay && inRect(p, viewBtn)) { resHide = !resHide; Snd.select(); return; }
     resPtrs.set(e.pointerId, p);
     if (resPtrs.size === 2) { const [a, b] = [...resPtrs.values()]; resPinch = Math.hypot(a.x - b.x, a.y - b.y); resDrag = null; return; }
     resDrag = { x: p.x, y: p.y, moved: false };          // 動かさずに離したら「次へ」、動かしたら回す
@@ -6806,6 +6852,7 @@ function endResDrag(e) {
   if (!resDrag) return;
   const tap = !resDrag.moved;
   resDrag = null;
+  if (tap && lapsePlay) { endLapse(false); return; }  // タイムラプス中: 動かさずに離したらとめる(ドラッグは回す)
   if (tap && isResult()) onAction();                  // タップ = 次へ
 }
 window.addEventListener('pointerup', endResDrag);
