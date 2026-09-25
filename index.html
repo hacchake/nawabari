@@ -731,7 +731,7 @@ const store = (() => {
 
 const settings = Object.assign(
   { bgm: 6, sfx: 7, diff: 'NORMAL', lives: CONFIG.LIVES, theme: THEMES.length, crt: true, mode: 'VS', music: 'AUTO', shake: true, glow: true, ink: 'MIX', claimSnd: 'MIX',
-    vsCpu: 'AUTO', cpuLv: 'AUTO', matchTime: 90, stageSel: 'TOUR', vsRule: 'TIME', vsStock: 3, stageSize: 'AUTO' },
+    vsCpu: 'AUTO', cpuLv: 'AUTO', matchTime: 90, stageSel: 'TOUR', vsRule: 'TIME', vsStock: 3, stageSize: 'AUTO', numerin: 'ON', bachikko: 'ON' },
   store.get('qlaim.settings', {})
 );
 if (!DIFFS[settings.diff]) settings.diff = 'NORMAL';
@@ -2792,7 +2792,7 @@ function initLevel(lv) {
   bonusT = bonus ? CONFIG.BONUS_TIME : 0;
   const spd = CONFIG.QIX_SPEED * diff().qix * Math.pow(CONFIG.QIX_ACCEL, lv - 1) * surf.def.qixSpeed * (bonus ? 0.6 : 1);
   qixes = [];
-  const nq = lv >= CONFIG.TWO_QIX_FROM && !hasRivals() ? 2 : 1;
+  const nq = !numerinOn() ? 0 : lv >= CONFIG.TWO_QIX_FROM && !hasRivals() ? 2 : 1;
   for (let k = 0; k < nq; k++) qixes.push(makeQix(k, nq, spd));
   if (surf.is3D && hasRivals()) {                     // 立体の対戦: 基地を作ってから空き地を数え直す
     setupRivals3D(lv);
@@ -2800,11 +2800,11 @@ function initLevel(lv) {
   }
 
   sparxes = [];
-  const ns = bonus || isZen() ? 0 : Math.min(4, surf.def.sparxStart + ((lv - 1) >> 1));   // BONUS AREA は SPARX なし
+  const ns = bonus || isZen() || !bachikkoOn() ? 0 : Math.min(4, surf.def.sparxStart + ((lv - 1) >> 1));   // BONUS AREA は SPARX なし
   for (let i = 0; i < ns; i++) spawnSparx(i % 2 ? 1 : -1, surf.def.sparxWait + i * 1.5 * (surf.def.sparxWait > 0));
   sparxTimer = CONFIG.SPARX_INTERVAL * diff().interval;
   // SEEKER は盤面ができて自機の位置が決まってから出す
-  if (bonus || isZen()) sparxTimer = Infinity;
+  if (bonus || isZen() || !bachikkoOn()) sparxTimer = Infinity;
   if (lv >= CONFIG.SEEKER_FROM && !bonus && !isZen()) for (let i = 0; i < (lv >= CONFIG.SEEKER_FROM + 4 ? 2 : 1); i++) spawnSeeker();
   // 最初からある壁(外枠・HOME)は buddy にかじられない
   baseA = new Uint8Array(surf.N);
@@ -2896,6 +2896,23 @@ function sealRemaining() {
       if (grid[idx(x, y)] === OPEN) fctx.fillRect(x * CS, y * CS, CS, CS);
 }
 
+// 囲んだときに「塗らずに残す側」の空き地のマス: ヌメリンがいればヌメリンのいる側、いなければいちばん広い空き地(= 狭いほうを塗る)
+function keepCell() {
+  if (qixes.length) return openNear(surf.qixCell(qixes[0]));
+  const N = surf.N, nb = surf.nb, seen = new Uint8Array(N), q = new Int32Array(N);
+  let best = -1, bestN = 0;
+  for (let s0 = 0; s0 < N; s0++) {
+    if (seen[s0] || grid[s0] !== OPEN) continue;
+    let h = 0, t = 0; q[t++] = s0; seen[s0] = 1;
+    while (h < t) { const c = q[h++]; for (let k = 0; k < 4; k++) { const j = nb[c * 4 + k]; if (j >= 0 && !seen[j] && grid[j] === OPEN) { seen[j] = 1; q[t++] = j; } } }
+    if (t > bestN) { bestN = t; best = s0; }
+  }
+  return best;
+}
+// ナワバリバトルの邪魔役: 対戦の設定で ON / OFF(タイトルの背景にはいつも出す)
+function numerinOn() { return !hasRivals() || state === 'title' || settings.numerin !== 'OFF'; }
+function bachikkoOn() { return !hasRivals() || settings.bachikko !== 'OFF'; }
+
 // startIdx を含む連結空き地を訪問済みにして返す
 function visitedFrom(startIdx) {
   const N = surf.N, nb = surf.nb;
@@ -2945,7 +2962,7 @@ function markClaim(i) {
 
 // QIX(先頭)のいる連結領域を残し、それ以外の空き地を占領する
 function claimFill(palNo) {
-  const visited = visitedFrom(openNear(surf.qixCell(qixes[0])));
+  const visited = visitedFrom(keepCell());
   let gained = 0;
   for (let i = 0; i < surf.N; i++) {
     if (grid[i] === OPEN && !visited[i]) { grid[i] = WALL; colA[i] = colFor(i, palNo); mixA[i] = 0; ownA[i] = 1; newCells.push(i); markClaim(i); gained++; }
@@ -3178,7 +3195,7 @@ function closeTrail() {
 
   // ---- QIX分断チェック(2体時): 別領域に分かれたら即クリア ----
   if (qixes.length > 1) {
-    const seen = visitedFrom(openNear(surf.qixCell(qixes[0])));
+    const seen = visitedFrom(keepCell());
     const crushed = qixes.filter((q, i) => i > 0 && !seen[openNear(surf.qixCell(q))]);
     if (crushed.length) {
       let gained = trail.length;
@@ -4657,6 +4674,8 @@ const MATCH_ITEMS = [
   { k:'vsStock',   label:'VSの残機',      vals:[1, 2, 3, 4, 5] },
   { k:'stageSel',  label:'ステージ',      vals:STAGE_OPTS },
   { k:'stageSize', label:'ステージの広さ', vals:['AUTO', 'S', 'M', 'L', 'XL'] },
+  { k:'numerin',   label:'ヌメリン(クラゲ)', vals:['ON', 'OFF'] },
+  { k:'bachikko',  label:'バチッコ(火の玉)', vals:['ON', 'OFF'] },
   { k:'_keys',     label:'キーコンフィグ' },
   { k:'_back',     label:'もどる' },
 ];
@@ -4756,9 +4775,13 @@ const VSSET_ITEMS = [
   { k:'_amount',  label:'' },                        // 時間制なら試合時間、残機制なら残機の数
   { k:'vsCpu',    label:'CPUの数' },
   { k:'cpuLv',    label:'CPUの強さ' },
+  { k:'_enemy',   label:'じゃま役' },                // ヌメリン・バチッコの ON / OFF
   { k:'_start',   label:'スタート' },
 ];
-let vsSel = 6, vsRects = [];
+let vsSel = VSSET_ITEMS.length - 1, vsRects = [];
+// じゃま役の組み合わせ: 両方 → ヌメリンだけ → バチッコだけ → なし
+const ENEMY_SETS = [['ON', 'ON', '両方'], ['ON', 'OFF', 'ヌメリンだけ'], ['OFF', 'ON', 'バチッコだけ'], ['OFF', 'OFF', 'なし']];
+function enemySetIdx() { const i = ENEMY_SETS.findIndex(e => e[0] === (settings.numerin || 'ON') && e[1] === (settings.bachikko || 'ON')); return i < 0 ? 0 : i; }
 function vsSetDo(i, dir) {
   const it = VSSET_ITEMS[i];
   if (it.k === '_start') { saveSettings(); startGame(); return; }
@@ -4769,6 +4792,7 @@ function vsSetDo(i, dir) {
   else if (it.k === '_amount') { if (settings.vsRule === 'STOCK') cyc('vsStock', [1, 2, 3, 4, 5]); else cyc('matchTime', MATCH_TIMES); }
   else if (it.k === 'vsCpu') cyc('vsCpu', ['AUTO', '1', '2', '3', '4', '5', '6', '7']);
   else if (it.k === 'cpuLv') cyc('cpuLv', ['AUTO'].concat(CPU_LV));
+  else if (it.k === '_enemy') { const e = ENEMY_SETS[(enemySetIdx() + dir + ENEMY_SETS.length) % ENEMY_SETS.length]; settings.numerin = e[0]; settings.bachikko = e[1]; }
   Snd.blip(); saveSettings();
 }
 function drawVsSetup(t) {
@@ -4779,7 +4803,7 @@ function drawVsSetup(t) {
   ctx.fillText('全員敵同士。いちばん広い陣地を取れ!', W / 2, 190);
   vsRects = [];
   VSSET_ITEMS.forEach((it, i) => {
-    const y = 240 + i * 64, sel = i === vsSel;
+    const y = 236 + i * 60, sel = i === vsSel;
     if (it.k === '_start') {
       vsRects.push({ x: W / 2 - 130, y: y - 30, w: 260, h: 52, i });
       ctx.fillStyle = sel ? '#ffd76b' : '#8a7a3a'; ctx.fillRect(W / 2 - 130, y - 30, 260, 52);
@@ -4796,6 +4820,7 @@ function drawVsSetup(t) {
     else if (it.k === 'vsRule') { v = settings.vsRule === 'STOCK' ? '残機制' : '時間制'; sub = settings.vsRule === 'STOCK' ? '時間なし。残機がなくなると脱落。最後まで残れ!' : '時間切れのとき、いちばん広い人の勝ち'; }
     else if (it.k === '_amount') { if (settings.vsRule === 'STOCK') { label = '残機'; v = vsStock() + '機'; sub = 'CPUも同じ数'; } else { label = '試合時間'; v = matchTime() + '秒'; } }
     else if (it.k === 'vsCpu') { v = settings.vsCpu === 'AUTO' ? 'AUTO' : settings.vsCpu + '人'; sub = settings.vsCpu === 'AUTO' ? '3人から、2ラウンドごとに1人ずつ増える(7人まで)' : ''; }
+    else if (it.k === '_enemy') { v = ENEMY_SETS[enemySetIdx()][2]; sub = 'ヌメリン(クラゲ)とバチッコ(火の玉)。いないと、囲んだとき狭いほうが塗れる'; }
     else if (it.k === 'cpuLv') { v = settings.cpuLv === 'AUTO' ? 'AUTO' : settings.cpuLv; sub = settings.cpuLv === 'AUTO' ? 'ラウンドが進むほど強くなる' : settings.cpuLv === '悪魔' ? 'これ以上ない強さ' : ''; }
     ctx.textAlign = 'left'; ctx.fillStyle = sel ? '#ffffff' : '#cdd8ff'; ctx.font = "bold 18px 'Courier New', monospace";
     ctx.fillText(label, 100, y - (sub ? 4 : -4));
@@ -5041,7 +5066,7 @@ function cutPlayer(r) {
 function rivalClose(r) {
   waveFrom = r.c;
   for (const c of r.trail) { grid[c] = WALL; colA[c] = 0; mixA[c] = 0; ownA[c] = 2 + r.id; claimAt[c] = blinkT; }
-  const visited = visitedFrom(openNear(surf.qixCell(qixes[0])));
+  const visited = visitedFrom(keepCell());
   let gained = r.trail.length;
   const no = teamNo(r.team), got = [];
   for (let i = 0; i < surf.N; i++) {
@@ -5074,7 +5099,7 @@ function rivalClose(r) {
 // 自機が陣地を取ったとき、囲まれた CPU の線はやられる
 function trapRivals() {
   if (!rivals.length) return;
-  const visited = visitedFrom(openNear(surf.qixCell(qixes[0])));
+  const visited = visitedFrom(keepCell());
   for (const r of rivals) if (r.drawing && r.trail.some(c => !visited[c])) rivalFail(r, 'trap');
   for (const r of rivals) if (!r.drawing && r.dead <= 0 && !isBoundary(r.c)) snapActor(r);
 }

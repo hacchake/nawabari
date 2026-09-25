@@ -1737,5 +1737,28 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   settings.stageSel = 'TOUR';
 }
 
+// ---- 105) じゃま役(ヌメリン・バチッコ)の ON / OFF ----
+{
+  settings.mode = 'VS'; backToTitle(); onAction(); stTimer = 1;
+  vsSel = VSSET_ITEMS.findIndex(it => it.k === '_enemy');
+  vsSetKey('ArrowRight'); assert('準備画面: じゃま役 → ヌメリンだけ', settings.numerin === 'ON' && settings.bachikko === 'OFF');
+  vsSetKey('ArrowRight'); vsSetKey('ArrowRight'); assert('準備画面: じゃま役 → なし', settings.numerin === 'OFF' && settings.bachikko === 'OFF');
+  let err = null; try { render(); } catch (e) { err = e.stack; } assert('準備画面の描画', !err, err);
+  for (const sk of ['PLANE', 'CUBE']) {
+    settings.stageSel = sk; startGame(); setState('play');
+    assert(sk + ': じゃま役なしならヌメリンもバチッコも出ない', qixes.length === 0 && sparxes.length === 0);
+    const open0 = countCells(OPEN);
+    err = null;
+    try { for (let i = 0; i < 60 * 20 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); } render(); } catch (e) { err = e.stack; }
+    assert(sk + ': じゃま役なしでも試合が進む・陣地が取れる', !err && countCells(OPEN) < open0 && sparxes.length === 0, err);
+  }
+  // 狭いほうを塗る
+  settings.stageSel = 'PLANE'; startGame(); setState('play');
+  const k = keepCell(); let n = 0; const v = visitedFrom(k); for (let i = 0; i < surf.N; i++) if (v[i]) n++;
+  assert('ヌメリンがいないときは広い空き地を残す', n === countCells(OPEN));
+  settings.numerin = 'ON'; settings.bachikko = 'ON'; settings.stageSel = 'TOUR';
+  startGame(); assert('ONに戻すとヌメリンが出る', qixes.length === 1);
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);
