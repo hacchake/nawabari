@@ -2701,6 +2701,11 @@ function redrawField() {
   fctx.clip(clip);
   fctx.fillStyle = 'rgba(0,0,0,0.10)'; fctx.fill(dim);
   fctx.fillStyle = 'rgba(255,255,255,0.07)'; fctx.fill(lit);
+  { // つや: 左上ほど明るく、右下ほど少し沈む(塗りに立体感)
+    const g = fctx.createLinearGradient(0, 0, fieldC.width, fieldC.height);
+    g.addColorStop(0, 'rgba(255,255,255,0.10)'); g.addColorStop(0.45, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.14)');
+    fctx.fillStyle = g; fctx.fillRect(0, 0, fieldC.width, fieldC.height);
+  }
   fctx.restore();
   fctx.fillStyle = 'rgba(255,255,255,0.35)'; fctx.fill(gloss);
   if (paths.line) { fctx.fillStyle = t.line; fctx.fill(paths.line); }
@@ -4939,9 +4944,9 @@ function drawHelp(t) {
     ctx.textAlign = 'center';
   };
   const fake = { c: 7, wait: 0, hist: [], ph: blinkT, stun: 0 };
-  row(162, (x, y) => drawClawd(x, y, 1.8, { moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'Clawd', 'あなた(赤)。空き地へ進むと線を引く(Zで速く)');
-  row(206, (x, y) => drawClawd(x, y, 1.8, { col: teamHex(2), moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'CPU', '同じルールの相手。描きかけの線に入ればたおせる');
-  row(250, (x, y) => {
+  row(158, (x, y) => drawClawd(x, y, 1.8, { moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'Clawd', 'あなた(赤)。空き地へ進むと線を引く(Zで速く)');
+  row(198, (x, y) => drawClawd(x, y, 1.8, { col: teamHex(2), moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'CPU', '同じルールの相手。描きかけの線に入ればたおせる');
+  row(238, (x, y) => {
     ctx.fillStyle = qixStroke(200, 62, 1);
     ctx.beginPath(); ctx.ellipse(x, y, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = qixStroke(200, 62, 1); ctx.lineWidth = 3;
@@ -4949,20 +4954,27 @@ function drawHelp(t) {
     ctx.moveTo(x + 8, y + 6); ctx.quadraticCurveTo(x + 14, y + 12, x + 18, y + 10); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 4, y - 1, 2.6, 0, Math.PI * 2); ctx.arc(x + 4, y - 1, 2.6, 0, Math.PI * 2); ctx.fill();
   }, 'ヌメリン', '空き地をただようクラゲ。触手が描きかけの線に触れるとミス');
-  row(294, (x, y) => drawSparx(x, y, fake), 'バチッコ', '線の上を走る火の玉。触れるとミス');
-  let y = 372;
+  row(278, (x, y) => drawSparx(x, y, fake), 'バチッコ', '線の上を走る火の玉。触れるとミス');
+  let y = 336;
   ctx.fillStyle = '#ffd76b'; ctx.font = "bold 14px 'Courier New', monospace";
   ctx.fillText('── アイテム(線で囲むと手に入る)──', W / 2, y - 12);
   for (const k of Object.keys(ITEMS)) {
-    y += 34;
+    y += 30;
     row(y, (x, yy) => drawItem({ c: 0, k, t: 0 }, { x, y: yy }, false), ITEMS[k].label, ITEMS[k].txt);
   }
-  y += 50;
+  y += 44;
+  ctx.fillStyle = '#ffd76b'; ctx.font = "bold 14px 'Courier New', monospace";
+  ctx.fillText('── ルールと操作 ──', W / 2, y);
+  y += 22;
   ctx.fillStyle = '#cdd8ff'; ctx.font = "13px 'Courier New', monospace";
-  ['時間切れ(残機制は最後まで残る)で、いちばん広い人の勝ち',
+  ['↑↓←→ / WASD / スティックで移動。Z / SPACE を押す間は速く描く',
+   '空き地へ進むと線を引く。線につないで囲むと自分の色の陣地',
+   '相手の描きかけの線に入るとたおせる。自分の線をさわられるとやられる',
+   '時間切れ(残機制は最後まで残る)で、いちばん広い人の勝ち',
    '続けて囲むとコンボの柄、大きく囲むと和柄が出る',
-   '勝つと次のラウンド。X を押す間は立体の全体が見える',
-   'ヌメリン・バチッコは 準備画面の「じゃま役」で出さないこともできる'].forEach((ln, i) => ctx.fillText(ln, W / 2, y + i * 22));
+   '勝つと次のラウンド(平面・立体・球・クラインの壺 …)',
+   'X を押す間は立体の全体が見える。P ポーズ / M 消音 / C スクショ',
+   'ヌメリン・バチッコは 準備画面の「じゃま役」で出さないこともできる'].forEach((ln, i) => ctx.fillText(ln, W / 2, y + i * 20));
   ctx.fillStyle = '#6d7ba8'; ctx.font = "bold 12px 'Courier New', monospace";
   ctx.fillText('Z / X / タップ でもどる', W / 2, 762);
 }
@@ -5622,6 +5634,75 @@ function drawBloom() {
   ctx.restore();
 }
 
+/* ---- 光の演出(点滅はしない) ----
+   足もとの光: 自分と CPU の足もとにチームの色の光だまり。描いている間はペン先が強めに光る。
+   ビネット: 平面のふちをゆるく暗くして、まん中に目がいくように。
+   後光: 立体の後ろに、いま1位のチームの色の淡い光(1位が変わるとゆっくり色が移る) */
+function rgbaHex(hex, a) { const c = rgbOf(hex); return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function fighterLights() {
+  const out = [];
+  const k = surf.is3D ? 1 : sprK();
+  if (state === 'title' || lapsePlay) return out;
+  if (deathTimer <= 0 && !player.out) { const p = playerScreen(); out.push({ x: p.x, y: p.y, col: teamHex(0), drawing: player.drawing, k }); }
+  for (const r of rivals) {
+    if (r.dead > 0 || r.out) continue;
+    if (surf.is3D && !visA[r.c]) continue;
+    const p = surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS };
+    out.push({ x: p.x, y: p.y, col: teamHex(r.team), drawing: r.drawing, k });
+  }
+  return out;
+}
+function drawFighterLights() {
+  if (!settings.glow) return;
+  const L = fighterLights();
+  if (!L.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const f of L) {
+    const R = (f.drawing ? 44 : 30) * f.k;
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R);
+    g.addColorStop(0, rgbaHex(f.col, f.drawing ? 0.48 : 0.30)); g.addColorStop(0.45, rgbaHex(f.col, f.drawing ? 0.16 : 0.09));
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(f.x - R, f.y - R, R * 2, R * 2);
+    if (f.drawing) {                                   // ペン先: 小さく白っぽい光
+      const r2 = 12 * f.k, g2 = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r2);
+      g2.addColorStop(0, 'rgba(255,255,255,0.6)'); g2.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g2; ctx.fillRect(f.x - r2, f.y - r2, r2 * 2, r2 * 2);
+    }
+  }
+  ctx.restore();
+}
+let vignetteC = null;
+function drawVignette() {
+  if (surf.is3D) return;
+  const w = W, h = H - FIELD_Y;
+  if (!vignetteC || vignetteC.width !== w || vignetteC.height !== h) {
+    if (typeof document === 'undefined' || !document.createElement) return;
+    vignetteC = document.createElement('canvas'); vignetteC.width = w; vignetteC.height = h;
+    const v = vignetteC.getContext('2d');
+    if (!v || !v.createRadialGradient) return;
+    const g = v.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.56);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.38)');
+    v.fillStyle = g; v.fillRect(0, 0, w, h);
+  }
+  ctx.drawImage(vignetteC, 0, FIELD_Y);
+}
+// 立体の後光の色(1位のチームの色へゆっくり近づく)
+let haloRgb = null, haloT = 0;
+function drawLeaderHalo() {
+  if (!isVS() || !rivals.length) return;
+  const rk = vsRanking(), want = rgbOf(rk[0] && rk[0].area > 0 ? rk[0].col : theme().accent);
+  const dt = clamp(blinkT - haloT, 0, 0.1); haloT = blinkT;
+  if (!haloRgb) haloRgb = want.slice();
+  for (let i = 0; i < 3; i++) haloRgb[i] += (want[i] - haloRgb[i]) * (1 - Math.exp(-dt * 1.2));
+  const rs = rimRadius(), cx = cam.cx, cy = cam.cy, c = haloRgb.map(v => Math.round(v)).join(',');
+  const g = ctx.createRadialGradient(cx, cy, rs * 0.7, cx, cy, rs * 1.35);
+  g.addColorStop(0, 'rgba(' + c + ',0.22)'); g.addColorStop(0.55, 'rgba(' + c + ',0.10)'); g.addColorStop(1, 'rgba(' + c + ',0)');
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rs * 1.35, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 /* ---- 平面の描画 ---- */
 function render2D(t) {
   ctx.drawImage(fieldC, 0, FIELD_Y);
@@ -5637,6 +5718,8 @@ function render2D(t) {
     }
     ctx.fillStyle = t.field; ctx.fill(hide);   // 白く光らせることはしない
   }
+  drawVignette();
+  drawFighterLights();
 
   drawInkTrail(t);
 
@@ -5884,8 +5967,9 @@ function drawBackdrop() {
 function render3D(t) {
   const S = surf, R = cam.R, D = cam.D, F = cam.F, cx = cam.cx, cy = cam.cy;
   drawBackdrop();
+  drawLeaderHalo();
   // 球の後ろにうっすら光の輪
-  if (S.sph) {
+  if (S.sph && !isVS()) {
     const rs = rimRadius();
     const g = ctx.createRadialGradient(cx, cy, rs * 0.9, cx, cy, rs * 1.12);
     g.addColorStop(0, shade(t.accent, 0.45));
@@ -5980,6 +6064,7 @@ function render3D(t) {
     if (cur >= 0) ctx.fill();
     ctx.globalAlpha = 1;
   }
+  drawFighterLights();
   // できあがった線: 描いていたときと同じネオンの帯(表を向いているマスだけ)
   if (isVS()) {
     const lc = [];
@@ -6114,7 +6199,7 @@ function renderOverlay() {
   }
 
   if (state === 'title') {
-    panel(56, 130, W - 112, 586);
+    panel(56, 130, W - 112, 530);
     ctx.fillStyle = t.accent;
     ctx.font = "bold 62px 'Courier New', monospace";
     ctx.fillText('NAWABARI', W / 2 + 3, 226 + 3);
@@ -6130,40 +6215,27 @@ function renderOverlay() {
       drawSpeech(x, 158 - 6);
     }
 
-    ctx.font = "15px 'Courier New', monospace";
+    ctx.font = "bold 16px sans-serif";
     ctx.fillStyle = '#cdd8ff';
-    const lines = [
-      'CPU と全員敵同士の ナワバリバトル',
-      '↑↓←→ / WASD / スティック : 移動',
-      '空き地へ進むと線を引く  Z / SPACE で速く',
-      '線で囲んで自分の色の陣地を広げろ!',
-      '相手の描きかけの線に入ると 相手をたおせる',
-      '自分の線をさわられたら やられる',
-      '時間切れで 一番広い人の勝ち',
-      '平面・立体・球・クラインの壺 …盤面が変わっていく',
-    ];
-    lines.forEach((s, i) => ctx.fillText(s, W / 2, 304 + i * 24));
+    ctx.fillText('線で囲んで、ナワバリを広げろ!', W / 2, 330);
 
     if (blinkOn) {
       ctx.fillStyle = '#ffd76b';
       ctx.font = "bold 20px 'Courier New', monospace";
-      ctx.fillText('Z / SPACE / タップ でスタート', W / 2, 540);
+      ctx.fillText('Z / SPACE / タップ でスタート', W / 2, 470);
     }
-    ctx.fillStyle = '#8fa3d9';
-    ctx.font = "bold 12px 'Courier New', monospace";
-    ctx.fillText('スタートすると ステージ・ルール・CPU を選べます', W / 2, 564);
     // OPTIONS ボタン
     titleModeRect = null;
-    titleOptRect = { x: W / 2 - 110, y: 600, w: 220, h: 38 };
+    titleOptRect = { x: W / 2 - 110, y: 540, w: 220, h: 38 };
     ctx.strokeStyle = '#3a4a7a';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(titleOptRect.x, titleOptRect.y, titleOptRect.w, titleOptRect.h);
     ctx.fillStyle = '#8fa3d9';
     ctx.font = "bold 15px 'Courier New', monospace";
-    ctx.fillText('OPTIONS  [X / O]', W / 2, 625);
+    ctx.fillText('OPTIONS  [X / O]', W / 2, 565);
     ctx.fillStyle = '#6d7ba8';
-    ctx.font = "bold 11px 'Courier New', monospace";
-    ctx.fillText('H あそびかた / G ギャラリー / P ポーズ / M 消音 / C スクショ', W / 2, 664);
+    ctx.font = "bold 12px 'Courier New', monospace";
+    ctx.fillText('H あそびかた / G ギャラリー', W / 2, 620);
     return;
   }
 
