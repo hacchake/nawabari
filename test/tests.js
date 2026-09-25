@@ -593,18 +593,10 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 
 
 
-// ---- 50) Clawdの色 ----
+// ---- 50) OPTIONS ----
 {
   for (const k in achvGot) delete achvGot[k];
-  settings.skin = 'ORANGE';
-  setState('options'); optSel = OPT_ITEMS.findIndex(o => o.k === 'skin'); adjustOpt(1);
-  assert('実績なしではORANGEだけ', settings.skin === 'ORANGE' && skinsOpen().length === 1);
-  achvGot.first = 'x'; achvGot.klein = 'x';
-  adjustOpt(1);
-  assert('実績で色が増えて選べる', settings.skin === 'MINT' && clawdCol() === '#5fd6b0');
-  adjustOpt(1); assert('次はGHOST(未解除は飛ばす)', settings.skin === 'GHOST');
-  delete achvGot.klein;
-  assert('選べない色になったら元の色', clawdCol() === CLAWD_COL);
+  setState('options');
   let err = null; try { render(); } catch (e) { err = e.stack; }
   assert('OPTIONS描画が例外なし', !err, err);
 }
@@ -781,17 +773,6 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
   assert('ZAPでSPARX一掃', sparxes.length === 0);
   for (let i = 0; i < 60 * 20; i++) updateSparxes(1/60);
   assert('SPARXはしばらくするとまた出る', sparxes.length > 0);
-}
-
-
-// ---- 69) RAINBOW ----
-{
-  achvGot.tourall = 'x'; settings.skin = 'RAINBOW';
-  const a = clawdCol(); blinkT += 0.5; const b = clawdCol();
-  assert('RAINBOWは色が変わり続ける', /^#[0-9a-f]{6}$/.test(a) && a !== b, a + ' ' + b);
-  delete achvGot.tourall;
-  assert('未解除ならオレンジ', clawdCol() === CLAWD_COL);
-  settings.skin = 'ORANGE';
 }
 
 
@@ -1017,26 +998,8 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 88) 球 = 地球の地図 / 線の色 / 曲 ----
+// ---- 88) 線の色 / 曲 ----
 {
-  settings.mode = 'SPHERE'; startGame(); setState('play');
-  assert('球は地球モード', earthMode() && earthRot);
-  const g = earthGrid();
-  let landN = 0; for (const v of g) if (v >= 6) landN++;
-  assert('地図データ: 陸は3〜4割', landN / g.length > 0.25 && landN / g.length < 0.45, (landN / g.length).toFixed(2));
-  // HOME(日本)は地図の色になっている
-  let home = 0; for (let c = 0; c < surf.N; c++) if (colA[c] >= EARTH_BASE) home++;
-  assert('HOME も地図で塗られる', home > 0 && ![...colA].includes(HOME_COL));
-  // 日本の中心(HOME)は陸、その少し東(太平洋)は海
-  const hc = [...colA].findIndex((a, c) => a >= EARTH_BASE && lineNeighbors(c).length >= 0 && a - EARTH_BASE >= 6);
-  assert('HOME のあたりに陸がある', hc >= 0);
-  // 塗ると地図の色
-  const cs = []; for (let c = 0; c < surf.N && cs.length < 200; c += 7) if (grid[c] === OPEN) cs.push(c);
-  for (const c of cs) { grid[c] = WALL; colA[c] = colFor(c, inkNo(1)); }
-  const kinds = new Set(cs.map(c => colA[c] - EARTH_BASE));
-  assert('塗ると地図の色(海も陸も)', cs.every(c => colA[c] >= EARTH_BASE) && [...kinds].some(k => k < 5) && [...kinds].some(k => k >= 6), [...kinds]);
-  let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('地球の描画が例外なし', !err, err);
   // 線: となりの陣地の色がにじむ
   settings.mode = 'PLANE'; startGame(); setState('play');
   const x0 = 20, y0 = 20;
@@ -1106,18 +1069,8 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 }
 
 
-// ---- 92) 地球の大陸・ギャラリー・クリアの見せ場 ----
+// ---- 92) ギャラリー・クリアの見せ場 ----
 {
-  assert('大陸の判定', continentOf(36, 138) === 0 && continentOf(48, 2) === 1 && continentOf(0, 20) === 2 && continentOf(40, -100) === 3
-    && continentOf(-15, -60) === 4 && continentOf(-25, 135) === 5 && continentOf(-80, 0) === 6 && continentOf(72, -40) === 3 && continentOf(24, 45) === 0);
-  settings.mode = 'SPHERE'; startGame(); setState('play');
-  const land = [];
-  for (let c = 0; c < surf.N; c++) if (grid[c] === OPEN && earthIdx(c) >= 6) land.push(c);
-  const f = discoverContinents(land);
-  assert('陸を囲むと大陸を発見', f.length >= 5, f.map(i => CONTINENTS[i]).join());
-  assert('同じ大陸は2回知らせない', discoverContinents(land).length === 0);
-  let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('大気の光つきの描画が例外なし', !err, err);
   // ギャラリー(シムでは画像が作れないので、入っている体で表示と操作を確かめる)
   gallery = [{ img: 'data:image/jpeg;base64,AA', s: 'PLANE', p: 72.5, d: '2026-09-25', sc: 1234 }, { img: 'data:image/jpeg;base64,BB', s: 'SPHERE', p: 80, d: '2026-09-25', sc: 99 }];
   backToTitle();
@@ -1277,7 +1230,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   let err = null;
   // 球
   startGame(); level = 3; initLevel(3); setState('play');
-  assert('VSも立体(球)でCPUが出る(全員別の基地)', surf.is3D && rivals.length === vsCpuCount(3) && rivals.every(r => isBoundary(r.c)) && new Set(rivals.map(r => r.home)).size === rivals.length && !earthMode());
+  assert('VSも立体(球)でCPUが出る(全員別の基地)', surf.is3D && rivals.length === vsCpuCount(3) && rivals.every(r => isBoundary(r.c)) && new Set(rivals.map(r => r.home)).size === rivals.length);
   err = null; try { for (let i = 0; i < 60 * 10 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); } render(); } catch (e) { err = e.stack; }
   assert('VSの立体が例外なく進む', !err, err);
 }

@@ -196,7 +196,7 @@ const CONFIG = {
     PLANE:       { label:'平面', sub:'インクのステージ', target:75, speed:1.00, qixSpeed:1.00, arm:11, pts:1,
                    sparx:1.00, sparxStart:2, sparxWait:0, music:'splash' },
     CUBE:        s3({ label:'立方体',       sub:'正多面体',           shape:'cube',        music:'chip' }),
-    SPHERE:      s3({ label:'球',           sub:'地球の地図があらわれる', shape:'sphere',   music:'earth' }),
+    SPHERE:      s3({ label:'球',           sub:'まんまるの球', shape:'sphere',   music:'earth' }),
     TETRA:       s3({ label:'正四面体',     sub:'正多面体',           shape:'tetra',       music:'chip', target:68 }),
     OCTA:        s3({ label:'正八面体',     sub:'正多面体',           shape:'octa',        music:'ambient' }),
     DODECA:      s3({ label:'正12面体',     sub:'正多面体',           shape:'dodeca',      music:'ambient' }),
@@ -742,7 +742,6 @@ const ACHV = [
   { id:'stars',    name:'星をつかむ',     txt:'星型3種をすべてクリア' },
   { id:'all',      name:'全制覇',         txt:'すべての盤面をクリア' },
   { id:'nearmiss', name:'ギリギリの達人', txt:'1ゲームでニアミスを5回' },
-  { id:'world',    name:'世界一周',       txt:'球(地球)で7つの大陸をすべて見つける' },
 ];
 const achvGot = store.get('qlaim.ach', {});
 const itemsGot = store.get('qlaim.items', {});      // これまでに取ったアイテムの種類
@@ -2184,7 +2183,7 @@ function rbBin(c) {
   else d = (P[c * 3] * ink.v[0] + P[c * 3 + 1] * ink.v[1] + P[c * 3 + 2] * ink.v[2]) * 5;
   return ((Math.floor(d) % RB_N) + RB_N) % RB_N;
 }
-function colFor(c, no) { return earthMode() ? EARTH_BASE + earthIdx(c) : no < 0 ? RB_BASE + rbBin(c) : no; }
+function colFor(c, no) { return no < 0 ? RB_BASE + rbBin(c) : no; }
 // colA の番号 → 色
 function palHex(a) {
   if (a >= TEAMC_BASE) return TEAMC_ALL[a - TEAMC_BASE] || '#888888';
@@ -2194,16 +2193,11 @@ function palHex(a) {
   return themePal[a - 1];
 }
 
-/* ---------------- 球: 地球の地図 ----------------
-   球(SPHERE)では、囲んだところに地球の地図があらわれる。最初の陣地(HOME)は日本。
-   地図は Natural Earth 110m(パブリックドメイン)の陸地・湖を2度刻み(180×90)にしたもの。
-   地表の種類(海の深さ・海氷・氷床・ツンドラ・森・草原・砂漠・山…)は緯度と地域から決めた近似 */
-const EARTH_RLE = 'f180f180f180f49h4g4f11g10f102f43h1f1h8g3f2g25f54h1f42f37h2f4h3f1h5f4g24f16h5f37h4f38f30h2f10h1f2h5f4g27f17h1f42h2f37d2c6d13c1d6e6h3e1d1e1h1e1h1e1h6e2d2e7g19e1d2c4b4c4d3e1d9c6d2e2h2e1d9e3h13e5d1e2d4e1h3e1h2e1d8c1d5e1d2c4d4e2d14e1h3e1h1e3h1e1d1e1h1e1h2e1h4e1h2e2d7e1g17e1d2c4b6c4d6e2d7c1d3e1h2e2d3e3d1e3h21e1h2e1d1e10d2e1d10e1h1e1d2c2d2e3h2e8d1e6h1e2h7e1d1e2h2e2h7g1e2d6e2g13e1g1e1d3c6b2c5d3e3h2e4d8e1h1e1d1e3h3e1h28e1h10e2h1e5d1e4h1e3d4e1h13e1h9e2h3e2h1e2h1e1h3e1h2e3h1g3e2d2c1d2e1g13e2d5c10d3e2h9e3d1e1d1e6h3e1h2e1h47e1h5h3e1d3e1h41e1d1e2g5e1d3e1g10e4d2e4d2c8d3e1h14e1h1e1h12e1h53e2i2e1d1e1i22e1i16e1i1e1d1e1i2g4e1d2c1d2e1g6e3d5e1g4e1d2c6d2e2i5e2i4e1i1e1i70e1d1e2d3e1i37e1d1e1d3e3g2e1g1e1d2c1d2e1g4e1d9e4d2c2d2c2d2e1i5e2i79d6e1i7e1i17e1i10e2d5e1i2g2e1d1e1d3c2d2e1g3e1d3c5d6c2d6e1i6e2i4e1i62e2i1e1i4e4d1c1d2c1d2e2i4e1d1e6i22e2d5e1i2g2e2g1e1d3c2d2e3d2c8d4c2d2e2d3e1i6e1d1e1i59e5i1e3i1e5d4c6d2e3i1e1d8e2i4p7o1p2i8e4d2e1i7e2d2c2d5c14d2e1i2e1d3e1i1e1i2e1d1e1i58e2d5e2i4e1d7c5d2e1i1e1d1e1d2c1d8e2i2p1o1p2o1p3o1p1i12e2i10e1d2c2d3c14d2e1i3e1d2e2i1e5i5m2k4m2k1m1k5m1k3m1k4m1k1m1k1m1k1i23e4d5e1i3e1d4c4c6d2e1d4c8d3e1i2p3o1p1o1p4i3e1i8e2i11e1d2c8b5c4d2e1i2e1i2e2i13k3m1k2m1k2m1k5m2k1m1k6m1k3m1i8e1i18e1d4e1i1e2d2c7c1b1c5d3c1d1c11d2e1j1p1o1p2o1p3o2k1m1k2e1k1j2k1j2k1j3k1j1k1j7e1d2c6b8c4d2e3j2e1j3k1j2k1j3k2j2k2m1k2m2k4m1k1m1k2m1k1m2k1m2k6m1k7j1k3j1k1j3k1j2k2j1k1j1k1e1j1e1d2c1d2e1d3c8b4c4d1c15d2e1o1e1o2p3o1p1o1k1m3k2j5k1j1k1j3k1j1e1j1e3k1j1e1d2c4b10c4d4e1j5k1j1k1j2k1j4k9m1k1m1k4m1k4m1k3m1k1m1k1m1k4j2k2j9k1j3k2j2k1e1k1e1d2c2d4c9b5c9b1c10d2e1p7o1p1k1m3k1m1j1e1j1e2j2k2j6e1d2e2j1e1d2c4b9c4d4e1j3o1p1o1p2o1j4k1j1k6m1k1m1k4m1k4m1k1m1k4m1k5j1k3j1k3j1k1j2k2j3k1j3k2j1e2j1e1d2c3d1c7b4b6c7b8c4d2e1p3o2p1o3k1m3k1m1j3e1k1e2j1k2j3e1j2e1d3e1d2c4b9c4d2e4j1k2p2o2e1p1j1k2j4e2k1e1k5e2n3o1n3k1m1k2n3o2n3o1n1o4n5j2k1j1k2j4k1j1e1d1e2d2c9b7b7c3b1c1b9c4d2e1p2o1p4o2m3k1m2k1j1k1e1j2k1j2k2j1e1d1e2d6c4b9c4d2e1j2k1j4e3p2e2j5e6p2o1p1e2o3n3o1k1j3o1n8o1n4o1n4k1j1k1j1k1j6e1d1e1j1k1e1d2c7b8b8c1b12c4d2e1o2p2o1p1o1p1o1m2k1m1k1m1j3k1j4k1j2e1d5c3d1c4b11c4d2e1j4e2d1e1j1e2j2e1j1k1j2e1j5o1p1o2p1e2n1o1n1o1n2k1j1k1j1n7o2n3o1n1o2n3j2k1j4k1j1e2d2e1j1e1d2c7b9b21c4d2e1p6o1p1o1k1m2k3j4k1j4e2d2c1d2c8b11c4d2e1k2j2k1e1d2e3d1e1j1e1j1k1e1k1j4k2o3p2e2o2n4j1k1j1p3o3p1o3p4n2o1n3j1k1j1e4j1e1d3e2j1e1d2c5b11b1a1b20c4d2e1p2o1p5n1m1k4j2k1j6e1d2c11b13c4d2e2j2e4j3e1j1e1d1e4j5k1j4k1e2j1k1j2k1j4o1p2o2p5o2p1o1n1o1n1o1n1o1j1k1j1k1j1e2j1k1e3j2e1d2c4b13a4b19c4d2e1o2p4o1n1k6j8e1d2c10b7a1b7c4d2e1k1j1k3j2k1e1d1e1d3e1j1e3j1e1j2k2j1k1j3n4o1n4p3o2p3o1p2o1p2k2j2k1j1k3j1e1d1e1j1e2j4e1d2c4b13a5b9a1b9c4d2e1n4o1n2k5j1k1j5e2d2c6b3c1b7a1b7c4d2e1j3k1j4k1j1e3d1e4d1e3j3k1j1k1j2k1n6o1n2p3o1p1o1p4o2p1o1k1j2k1j1k1j4e1d2e2j1k1e3d2c4b10a4a6b7a5b7c4d2e1n1o1n4k1j8k1j1e1d3c6b11a1b7c4d2e1n11o1n2e1o2n2e1n2o1n1o1n6o1n5o1n3p1o1p7o1p4j10k1e1d3e2d4c4b8a7a7b3a1b1a7b7c4d2e2o3n1j4e7j1e1d2c4b12a1b7c4d2e2n4o1n4o1n12o1n6e1n1o2n2o1n4o1p1o2p3o2p2o1p1o1p1j1k1j6k1j1k1e1d8c4b8a8a8b1a10b7c4d2e1n1e1n1o1n1j1k1j1e1d6e1j1e1d2c5b10a1b7c4d2e1n13o1n2o1n3o1n1o1n1e1n3o2n2e2n9p5o2p1o2p4j3k1j2k1j3e1d2c2d2c6b8a9a20b7c4d2e1n1e1n1o1k1j2e1d6e2d3c1d1c4b17c4d2e1n1o2n1o2n3o1n4o1n4o1n1o2n1e2n7e1n1e5o1n2j4k3j8k2j7e1d2c9b7a11a21b7c4d2e1d1e1j2k2e1d3e3k2e2d4c4b15c4d2e1o1n1o1n5o1n4o1n12e1n2o1n2o1n5e1d2e2j10k1j2k1j1k1j2k1j2k1j1e2k1e1d2c7b7a12a22b7c4d3e1j1k1j2e1d2e1j2e4j1e1d1e1d2c4b13c4d2e1n4o1n1o1n1o2n3o1n1o1n3o1n5o1n1o1e1n4o1n4e1d4e1k1j6k1j1e2j1k2j4k1e4d2e1d2c7b7a1b1a11a23b7c4d3e1k1m2k1e2m2e1d4e1d1e1m1e1d2c6b11c4d2e1n1o1n1o1n4o1n13o1n4e2n5o2n1e1d2c1d2e1m1k3m2e2d2e1m2k3m1e1m1e1d4e1d2c4b9a1b4a9a24b7c5d2e2k2m4e2d6e1d2c8b10c4d2e1n4o1n7o1n10o1n1o1n1e2n3o1n1o1e2d2c3d2e1m1k1m2e1d4e1k1m5k1e1d4e1m1e1d2c4b14a8a25b7c5d3e4m3k1e1d11c6b8c4d2e1n3o1n2o2n4o1n1o1n14e1n3o1e2d3c4d2e1m1k1m1e1d3c1d2e2m1k1m3e1d4e1m1e1d2c4b15a7a26b7c5d6e2k1m1e1d3e4d5c6b8c4d2e1m1k14m1k1m1k1m3k2o1n1o1n1o1e1n1e3d3c5d2e1m3e1d2c3d2e1m3k1m2e1d3e1m1e2d2c4b15a6a27b7c6d6e1k1e1d1e2k1m2k1e4d4c6b5c4d2e1k1m1k1l3k2m1k5m1k3m2k1m2k5m2e2k1m1e1d2c6d2e1m2e1d2c3d2e1k1e2k1m1e1d5e2k1e1d2c5b14a5a28b8c8d3e1k1e1m1e1m2k1m5e1d4c7b4c4d2e1m1k1l3m1k1m2k3m1k1m1k2m2k1m1k1m1k1m2k1m1k1m3e1d2c7d2e1m1e1m1e1d2c2d2e1l1e2l1e1d8e1d2c8b13a4a29b8c9d2e1d1e1l10e3d2c7b4c4d2e1l31e1d2c8d2e2l1e1d2c2d2e5d4e2d2e1l1e1d2c8b4c1b8a3a30b8c9d3e1p4o1p1l7e1d2c7b4c4d2e1l2e1l1e4l21e1d2c4b2c4d3e1d2c2d2e1l1e1l2e1d3e1l2e1d2e1d4c8b2c4b7a2a31b9c8d2e1p3o1p1o1l8e1d4c5b4c4d2e2d1e1d4e2l18e1d2c4b4c4d4c4d2e1l1e1l1e1d2e1l3e2d10c11b7a1a32b11c4d2e1l1p3o2p1l8e2d5c4b4c4d10e1l17e1d2c4b6c5d1c5d2e1l2e1d2e1l4e1l1e1d3e2d6c10b7b1a32b10c4d2e1l1p3o1p1o1l10e3d3c4b4c4d2c1d1c2d2e1l12e1l4e1d2c4b8c11d2e1l2e1d1e1l4e2d3e1l2e4d3c4d1c5b6b2a32b9c4d2e1l1p2o1p3l13e2d2c4b4c10d2e1l15e1d2c4b10c6b1c4d2e1l2e2l3e1l2e1d1e1l1e1l1e1l3e2d2c2d4c4b5b3a32b7c4d2e1l2p5o1l15e1d2c4b4c10d2e1l14e1d2c5b10c4b3c4d2e1l1e5d1e2l1e1d1e1d1e1d1e1l4e1d4e1d3c4b4b4a32b7c4d2e1l1p5o1l16e1d2c4b4c9d2e1l14e1d2c1d1c4b11c1b5c4d2e1l3e1d1e1d2e2d5e1l5e1d2e1l1e2d2c4b3b5a32b7c4d2e1p4o2l11m1k1m1k1e1d2c4b6c2b1c5d2e1m5k1m8e1d5c4b17c4d2e3d1e1l1e1d1e1l1e1d5e1l2e1l1e1d3e2k1e1d2c4b2b6a31b7c4d2e1p1o2p3l11m3e1d2c4b12c4d2e1m1k1m1k1m1k1m1k1m3k1m1e1d3e1d2c4b17c4d6e1d3e1d2e3d2e2d1e1d2c1d3e1d4c4b1b7a31b7c4d2e1p5l11m3e1d2c4b11c4d2e1k1m1k1m1k1m1k1m4k1m2e1d2e1m1e1d2c4b17c4d3c1d5e3m3e1d1e1m1e1d2c3d5e1d2c4c1b7a30b7c4d2e1o3p2k3m3k2m1k1m2k1m1e1d2c4b11c4d2e1k1m1k6m2k3m1e1d1e2k1e1d2c4b18c8d3e1m1k1m1k2m1e1d1e1k1m1e1d2c4d2e1m1e1d2c3b7a32b7c4d2e2p3k1m1k1m1k2m1k2m3k1e1d2c4b12c4d2e1n2o2n1m3k1m4e1d1e1m2k1e1d2c4b11a1b7c6d3e1m4k1m2k1e2m2e1d2c5d2e1d2c4b6a34b7c4d3e1p1o1m2k1m2k1m1k1m2k1m1k1e1d2c4b12c4d2e1n1o1n3m1k1m1k1m3e1d2e1m1k1m1e1d2c4b10a3b7c4d2e3n1o2n4o1n2m2e2d2c3d2e1d2c4b1b7a34b7c4d2e1p2k1j2k1j1k1j3k2j2e1d2c4b13c4d2e1n3o1k1j6e1d2e1j2e1d2c4b7a2b1a3b7c4d2e1o1n3o1n1o1n2o1n3j2k2e1d2c1d2e1j1e1d2c4b6a35b7c4d2e1p2k1j7k2j1e2d2c4b14c4d2e1n1o1n2j5k1j1e1d2e1j1k1e1d2c4b7a5b7c4d2e1n1o1n1o1n2o1n3o1n2o1j4e1d2c2d2e1d2c4b1b6a35b7c4d2e1o1p1k1j2k1j4k1e2d3c4b7a1b7c4d2e1n2o1n1j2k1j2k1e1d3e1j1e1d2c4b7a6b7c4d2e1o1n3o1n2o1n3o1n2j3k1j1e1d2c2d3c5b1b7a34b7c4d2e1p2j2k3j2k1j1e1d3c4b7a3b7c4d2e1o2n1k1j1k1j2e1d2c1d2e1d2c4b9a5b7c4d2e1n5o1n5o2n1j2k1j3e1d2c2d1c7c1b7a32b7c4d2e1p3k2m1k1m1j3e1d2c5b7a4b7c4d2e1j4k1j1k2e1d2c2d3c4b11a4b7c4d2e1n2o1n11m4j1k1e1d2c6d1c3c2b7a31b7c4d2e1p3k5j3e1d2c4b7a6b7c4d2e1j6e1d2c4d1c4b13a4b7c4d2e1n4o1n1o2n5m1k3j2e1d2c5d3c2c3b7a30b7c4d2e1p1o1p1k3m2j2e1d2c4b7a7b7c4d2e1j2k1j1k1e1d2c9b15a3b7c4d2e1k2j1k1e5k7m1j1e1d2c5d2e1d2c1c4b7a29b7c4d2e1o2p1k2m2e3d2c4b7a9b7c4d2e5d2c9b9c1b7a2b7c4d2e1j1e3d5e2k5m1e1d2c5d2e1k1e1d2d1c4b7a27b7c4d2e1p2o1p1k3m1k1e1d2c4b7a11b7c4d7c4b2c3b9c3b7a2b7c4d2e1d10e1j3k1j1e1d2c6d2e1j1e1d1d2c4b7a26b7c4d2e1p4k1j1e3d2c4b7a13b7c4d5c4b4c1b9c5b8a1b7c4d5c5d3e5d2c7d2e1j2e1d1c4b7a27b7c4d2e1j1k3e1j1e1d3c4b7a15b7c11b14c7b16c4d1c10d2e1j2e1d2c6d2e1j2e1d1c4b7a29b7c4d2e1k3m1e1d3c4b7a17b7c9b14c4d1c4b16c15d2e1j1e1d2c5d2e1j2e1d2c3b7a28b8c4d2e1k4e1d2c5b7a11b15c7b14c4d3c4b16c15d2e1d2c5d2e1k1j1e1d2c1c2b7a11b16a1b9c4d2e1j1k2m1e1d2c4b7a10b18c5b14c4d2e1d2c4b16c5b5c5d3c7d2e2d2c2c1b7a7b30c4d2e1k1j1k2e1d2c4b7a5b42c4d2e1k1e1d2c4b16c1b10c4d1c4b1c4d4c3b45c4d2e1j2k1e1d2c4b56c4d2e1d2c4b29c7b3c4d2c4b46c4d2e1j3e1d2c4b52c8d3c4b4c1b5c9b2c15b5c8b1b47c4d2e1j2e1d2c4b44c1b2c14d1c43b4c6b2b48c4d2e2d2c4b29c86b3b38c3b4c1b3c4d4c1d1c4b20c93b4b20c16b1c17d6c4b17c34d4c15d1c5d9c2d12c13b4b15c40d3e1d2c4b10c32d1c2d15c4d39c9b3c54d2e2g1e1d2c29d24e4d15e1d5e9d2e12d11c6c38d3c4d1c7d2e1g2e1d2c22d24e1d2e5g4e6d4e5g1e5g9e2g12e5d7c5f56g2f49g1f2g15f4g39f12f54g5f32g33f2g48f6f38g3f4g1f10g4f23g92f5f20g16f1g1f2g18f23g92f7f15g36f24g97f8g180g180g180g180g180g180';
+// 色の枠(昔の地球の地図の16色。番号をずらさないため残している)
 const EARTH_PAL = ['#0a2350', '#0f3268', '#16467f', '#1f5d98', '#2f79b0', '#d6e4ec',   // 海(深い→浅い)・海氷
                    '#f3f6f8', '#8b957a', '#2d5634', '#3e7338', '#86a052', '#1e5a2c',   // 氷床・ツンドラ・北方林・森・草原・熱帯雨林
                    '#b0a15c', '#dcc28a', '#b88f5c', '#8c7b66'];                        // サバンナ・砂漠・岩の砂漠・山
 const EARTH_BASE = RB_BASE + RB_N;
-let earthMap = null, earthRot = null;
 /* ---- チームの色: 赤系・黄系・青系を4段階ずつ。陣地を取るたびに系統の中で少し揺らぐ ----
    中立: 相手の陣地を上塗りして2色が混ざった色(赤+黄=オレンジ / 赤+青=紫 / 黄+青=緑)。どのチームのものでもない */
 const TEAM_SHADES = [
@@ -2240,84 +2234,6 @@ function ownerTeam(o) {
   if (o === 1) return 0;                              // 自機は赤チーム
   if (o >= 2 && o < OWN_NEUTRAL) { const r = rivals[o - 2]; return r ? r.team : 0; }
   return -1;
-}
-function earthGrid() {
-  if (earthMap) return earthMap;
-  earthMap = new Uint8Array(180 * 90);
-  let i = 0;
-  EARTH_RLE.replace(/([a-p])(\d+)/g, (m, k, n) => { earthMap.fill(k.charCodeAt(0) - 97, i, i + (+n)); i += +n; return ''; });
-  return earthMap;
-}
-function earthMode() { return !!surf && surf.key === 'SPHERE' && !hasRivals(); }   // 対戦モードはチームの色で塗る
-// ゲームの向き → 地球の向き。HOME の中心が日本(北緯36度・東経138度)に来るように回す
-function setupEarth() {
-  const P = surf.pos;
-  let h = [0, 0, 0];
-  for (let c = 0; c < surf.N; c++) if (colA[c] === HOME_COL) { h[0] += P[c * 3]; h[1] += P[c * 3 + 1]; h[2] += P[c * 3 + 2]; }
-  h = vnorm(h);
-  const la = 36 * Math.PI / 180, lo = 138 * Math.PI / 180;
-  const j = [Math.cos(la) * Math.sin(lo), Math.sin(la), Math.cos(la) * Math.cos(lo)];
-  const ax = vcross(h, j), sn = Math.hypot(ax[0], ax[1], ax[2]), cs = h[0] * j[0] + h[1] * j[1] + h[2] * j[2];
-  if (sn < 1e-6) { earthRot = [1, 0, 0, 0, 1, 0, 0, 0, 1]; }
-  else {
-    const k = ax.map(v => v / sn), K = [0, -k[2], k[1], k[2], 0, -k[0], -k[1], k[0], 0];
-    const KK = [0, 1, 2].flatMap(r => [0, 1, 2].map(c2 => K[r * 3] * K[c2] + K[r * 3 + 1] * K[3 + c2] + K[r * 3 + 2] * K[6 + c2]));
-    earthRot = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => (i % 4 === 0 ? 1 : 0) + sn * K[i] + (1 - cs) * KK[i]);
-  }
-  for (let c = 0; c < surf.N; c++) if (colA[c] === HOME_COL) colA[c] = EARTH_BASE + earthIdx(c);
-}
-// セルの緯度・経度(度)
-function earthLL(c) {
-  const P = surf.pos, R = earthRot || [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  const x = P[c * 3], y = P[c * 3 + 1], z = P[c * 3 + 2], l = Math.hypot(x, y, z) || 1;
-  const ex = (R[0] * x + R[1] * y + R[2] * z) / l, ey = (R[3] * x + R[4] * y + R[5] * z) / l, ez = (R[6] * x + R[7] * y + R[8] * z) / l;
-  return [Math.asin(clamp(ey, -1, 1)) * 180 / Math.PI, Math.atan2(ex, ez) * 180 / Math.PI];
-}
-function earthIdx(c) {
-  const [lat, lon] = earthLL(c);
-  const px = clamp(Math.floor((lon + 180) / 2), 0, 179), py = clamp(Math.floor((90 - lat) / 2), 0, 89);
-  return earthGrid()[py * 180 + px];
-}
-// 大陸(陸のセルだけ)。緯度・経度のおおまかな範囲で分ける
-const CONTINENTS = ['アジア', 'ヨーロッパ', 'アフリカ', '北アメリカ', '南アメリカ', 'オセアニア', '南極'];
-function continentOf(lat, lon) {
-  if (lat < -60) return 6;
-  if (lon >= -82 && lon <= -34 && lat >= -56 && lat < 13) return 4;
-  if ((lon >= -170 && lon <= -52 && lat >= 7) || (lon > -75 && lon <= -10 && lat >= 59)) return 3;
-  if (lon >= 110 && lat <= -10 && lat >= -50) return 5;
-  if (lon >= 130 && lon <= 180 && lat > -11 && lat <= 0) return 5;
-  if (lon >= -25 && lon <= 45 && lat >= 36) return 1;
-  if (lon >= -18 && lon <= 52 && lat >= -36 && lat < 37 && !(lon > 34 && lat > 12)) return 2;
-  return 0;
-}
-// 囲んだ陸から、はじめて見つけた大陸を知らせる(1エリアごと。全部見つけた記録は保存)
-let earthFound = new Set();
-const worldSeen = store.get('qlaim.continents', {});
-function discoverContinents(cells) {
-  if (!earthMode()) return [];
-  const cnt = new Array(CONTINENTS.length).fill(0);
-  for (const c of cells) if (earthIdx(c) >= 6) { const [la, lo] = earthLL(c); cnt[continentOf(la, lo)]++; }
-  const found = [];
-  cnt.forEach((n, i) => {
-    if (n >= 3 && !earthFound.has(i)) {
-      earthFound.add(i); found.push(i);
-      if (!worldSeen[i]) { worldSeen[i] = todayStr(); store.set('qlaim.continents', worldSeen); }
-    }
-  });
-  if (CONTINENTS.every((_, i) => worldSeen[i])) unlock('world');
-  return found;
-}
-// 大気の光: 球のまわりにうっすら青いふち(地球だけ)
-function drawAtmosphere() {
-  if (!earthMode()) return;
-  const R = cam.R, o = projXYZ(0, 0, 0);
-  const rr = cam.F / Math.sqrt(Math.max(1.05, cam.D * cam.D - 1)) * (Math.hypot(surf.pos[0], surf.pos[1], surf.pos[2]) || 1);
-  const g = ctx.createRadialGradient(o.x, o.y, rr * 0.9, o.x, o.y, rr * 1.16);
-  g.addColorStop(0, 'rgba(110,170,255,0)');
-  g.addColorStop(0.35, 'rgba(110,170,255,0.32)');
-  g.addColorStop(1, 'rgba(110,170,255,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(o.x, o.y, rr * 1.16, 0, Math.PI * 2); ctx.fill();
 }
 
 /* ---------------- 塗りの模様 ----------------
@@ -2658,7 +2574,7 @@ function initLevel(lv) {
   grid = new Uint8Array(surf.N);
   colA = new Uint8Array(surf.N);
   col2A = new Uint8Array(surf.N); mixA = new Uint8Array(surf.N);
-  mixSlot.clear(); mixSlotKeys.length = 0; earthRot = null; earthFound = new Set();
+  mixSlot.clear(); mixSlotKeys.length = 0;
   claimAt = new Float32Array(surf.N).fill(-1e9);
   ringA = new Uint8Array(surf.N);
   waveUntil = 0; rings = [];
@@ -2672,7 +2588,6 @@ function initLevel(lv) {
     if (!(stats.maxArea[modeKey()] >= lv)) stats.maxArea[modeKey()] = lv;   // 最高到達エリア
   }
   const s = surf.setup();
-  if (earthMode()) setupEarth();
   setupRivals(lv);
   homeCell = s.home;
   initOpen = 0;
@@ -3103,18 +3018,11 @@ function closeTrail() {
   // 模様: 塗ったときの状況(時間・面積・アイテム・コンボ)で決まる
   const pat = pickPattern({ drawTime: blinkT - (player.drawT || blinkT), pct: gained / initOpen * 100 });
   lastPat = pat;
-  for (const i of discoverContinents(newCells)) {
-    const P0 = surf.screenOf(player.c);
-    floats.push({ x: W / 2, y: FIELD_Y + 110, txt: CONTINENTS[i] + (i === 6 ? '大陸' : '') + 'を発見!', t: 2.4, col: '#9fe3ff', big: true });
-    say(CONTINENTS[i] + 'だ!', 1.6, true);
-    Snd.bell(880, 0.08, 0.3); Snd.bell(1320, 0.06, 0.45);
-    spawnParticles(P0.x, P0.y, 20, '#9fe3ff');
-  }
   if (isVS()) {                                        // ナワバリバトル: コンボか大きく囲むと柄(色はチームのまま)
     const tp = claimPattern(newCells, combo, player.c);
     if (tp) { const P0 = playerScreen(); floats.push({ x: P0.x, y: P0.y - 40, txt: TEAM_PATS[tp], t: 1.4, col: teamHex(0) }); }
   }
-  if (!inkRainbow() && !earthMode() && !isVS()) {     // ナワバリバトルは、どっちの陣地か分かるよう無地
+  if (!inkRainbow() && !isVS()) {     // ナワバリバトルは、どっちの陣地か分かるよう無地
     applyPattern(newCells, pat);
     if (pat !== 'grad' && newCells.length > 30) {
       const P0 = surf.screenOf(player.c);
@@ -3159,7 +3067,7 @@ function closeTrail() {
       const p = surf.screenOf(trail[i]);
       spawnParticles(p.x, p.y, 2, inkCol);
     }
-    Snd.claim(gained * (surf.is3D ? 4 : 1), slow, earthMode() ? 'earth' : lastPat);
+    Snd.claim(gained * (surf.is3D ? 4 : 1), slow, lastPat);
     Snd.sweep();
     rings.push({ x: sp.x, y: sp.y, t: 0, col: inkCol });
   }
@@ -4895,7 +4803,6 @@ const OPT_ITEMS = [
   { k:'crt',   label:'CRT効果',  vals:['OFF','ON'], bool:true },
   { k:'glow',  label:'発光',     vals:['OFF','ON'], bool:true },
   { k:'shake', label:'揺れ・振動', vals:['OFF','ON'], bool:true },
-  { k:'skin',  label:'Clawdの色' },
   { k:'ink',   label:'インク', vals:INK_OPTS, str:true },
   { k:'_match', label:'対戦の設定・キー' },
   { k:'_gallery', label:'ギャラリー' },
@@ -4911,11 +4818,7 @@ function adjustOpt(dir) {
   if (it.k === '_stats') { setState('stats'); Snd.select(); return; }
   if (it.k === '_gallery') { openGallery('options'); return; }
   if (it.k === '_match') { openMatchOpts('options'); return; }
-  if (it.k === 'skin') {   // 解除済みの色だけを順に
-    const op = skinsOpen(), i = Math.max(0, op.findIndex(k => k.name === settings.skin));
-    settings.skin = op[(i + dir + op.length) % op.length].name;
-    Snd.blip(); saveSettings(); return;
-  }
+
   if (it.bool) {
     settings[it.k] = !settings[it.k];
     if (it.k === 'crt') applyCrt();
@@ -5122,22 +5025,7 @@ function drawSparx(px, py, s) {
    線を引いている間は腕を振る。ときどきまばたき。o の中身:
    moving/walkF: 歩きアニメ, drawing: 腕振り, look: 目線(-1/0/1), blink, dead */
 const CLAWD_COL = '#d97757', CLAWD_EYE = '#1d1411';
-// Clawd の色。need の実績を解除すると選べる(OPTIONS「Clawdの色」)
-const CLAWD_SKINS = [
-  { name:'ORANGE', col:CLAWD_COL, need:null },
-  { name:'MINT',   col:'#5fd6b0', need:'first' },
-  { name:'SKY',    col:'#6fb6ff', need:'combo' },
-  { name:'PINK',   col:'#ff8fc8', need:'items' },
-  { name:'GHOST',  col:'#e8ecff', need:'klein' },
-  { name:'GOLD',   col:'#ffcc33', need:'all' },
-  { name:'RAINBOW', col:null,     need:'tourall' },   // 色が虹のように変わり続ける
-];
-function skinsOpen() { return CLAWD_SKINS.filter(k => !k.need || achvGot[k.need]); }
-function clawdCol() {
-  const k = skinsOpen().find(k => k.name === settings.skin);
-  if (k && !k.col) return hslHex(blinkT * 120, 85, 62);
-  return k ? k.col : CLAWD_COL;
-}
+function clawdCol() { return CLAWD_COL; }
 function drawClawd(cx, cy, s, o) {
   o = o || {};
   const x0 = cx - 6.5 * s, y0 = cy - 4.5 * s - (o.moving && o.walkF ? s : 0);
@@ -5381,7 +5269,7 @@ function render() {
 
   ctx.fillStyle = t.field;
   ctx.fillRect(-8, -8, W + 16, H + 16);
-  if (surf.is3D) { drawAtmosphere(); render3D(t); }
+  if (surf.is3D) render3D(t);
   else render2D(t);
   drawItems();
   if (rivals.length && !surf.is3D) drawRivals(t);
@@ -6095,8 +5983,6 @@ function renderOverlay() {
         let vs;
         if (it.bool) vs = settings[it.k] ? 'ON' : 'OFF';
         else if (it.vals) vs = it.str ? settings[it.k] : it.vals[settings[it.k] | 0];
-        else if (it.k === 'skin') vs = (skinsOpen().find(k => k.name === settings.skin) || CLAWD_SKINS[0]).name
-                                      + ' (' + skinsOpen().length + '/' + CLAWD_SKINS.length + ')';
         else vs = String(settings[it.k]);
         ctx.fillStyle = sel ? '#ffffff' : '#aab6dd';
         ctx.fillText('◀ ' + vs + ' ▶', W - 84, y);
@@ -6186,7 +6072,7 @@ function renderOverlay() {
     if (stTimer < 1.2) {
       ctx.globalAlpha = Math.min(1, stTimer * 3);
       ctx.fillStyle = '#ffffff'; ctx.font = "bold 22px 'Courier New', monospace"; ctx.textAlign = 'center';
-      ctx.fillText(earthMode() ? '地図ができた!' : 'できあがり!', W / 2, FIELD_Y + 70);
+      ctx.fillText('できあがり!', W / 2, FIELD_Y + 70);
       ctx.globalAlpha = 1;
       return;
     }
