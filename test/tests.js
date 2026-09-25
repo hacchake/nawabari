@@ -1480,16 +1480,19 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
     settings.mode = 'VS'; settings.stageSel = sk; startGame(); setState('play'); player.invuln = 99;
     for (let i = 0; i < 60 * 20 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); }
     vsEnd();
-    const fin = { g: grid.slice(), a: colA.slice() };
+    const fin = { g: grid.slice(), a: colA.slice() }, finAreas = rivalAreaSum() + playerArea();
     assert(sk + ': 試合中の盤面の変化を記録', lapse.frames.length >= 5, lapse.frames.length);
     stTimer = 2;
     onKeyDown({ key: 't', preventDefault() {} });
     assert(sk + ': T でタイムラプスを再生(はじめの盤面から)', !!lapsePlay && countCells(WALL) < fin.g.filter(v => v === WALL).length);
+    const lastF = lapse.frames[lapse.frames.length - 1];
+    assert(sk + ': 記録に試合の時間と全員の割合', lastF.t > 5 && lastF.sh.length === rivals.length + 1);
+    assert(sk + ': 再生のはじめは順位バーの広さも、はじめの盤面', playerArea() + rivalAreaSum() < finAreas);
     let err = null;
     try { for (let i = 0; i < 60 * 3; i++) { blinkT += 1 / 60; tickMeta(1 / 60); if (i % 20 === 0) render(); } } catch (e) { err = e.stack; }
-    assert(sk + ': 再生中の描画', !err && !!lapsePlay, err);
-    for (let i = 0; i < 60 * 6 && lapsePlay; i++) tickMeta(1 / 60);
-    assert(sk + ': 最後まで見ると試合の終わりの盤面にもどる', !lapsePlay && grid.every((v, i) => v === fin.g[i]) && colA.every((v, i) => v === fin.a[i]) && state === 'vsres');
+    assert(sk + ': 再生中の描画(順位バー・推移グラフ)', !err && !!lapsePlay && lapsePlay.T > 0, err);
+    for (let i = 0; i < 60 * 9 && lapsePlay; i++) tickMeta(1 / 60);
+    assert(sk + ': 最後まで見ると試合の終わりの盤面にもどる', !lapsePlay && grid.every((v, i) => v === fin.g[i]) && colA.every((v, i) => v === fin.a[i]) && state === 'vsres' && rivalAreaSum() + playerArea() === finAreas);
     startLapse(); onKeyDown({ key: 'z', preventDefault() {} });
     assert(sk + ': キーでとめても盤面はもどる(次へは進まない)', !lapsePlay && state === 'vsres' && grid.every((v, i) => v === fin.g[i]));
   }

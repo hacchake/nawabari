@@ -4457,7 +4457,7 @@ function checkLeader(dt) {
   const pr = rivals.find(q => q.name === prev);
   if (pr && pr.sayT <= 0 && pr.dead <= 0) rivalSay(pr, 'behind');
 }
-function drawVsHud() {
+function drawVsHud(clock) {
   const x = 120, y = FIELD_Y + 34, w = W - 240, h = 14;
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
   ctx.fillStyle = '#2a3150'; ctx.fillRect(x, y, w, h);
@@ -4489,14 +4489,15 @@ function drawVsHud() {
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(cx2 - cw / 2 + 2, ty - 11, cw - 4, 15);
     if (e.me) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(cx2 - cw / 2 + 2.5, ty - 10.5, cw - 5, 14); }
     ctx.fillStyle = e.out ? '#666a80' : e.col; ctx.fillText((e.me ? 'YOU ' : '') + (e.out ? '脱落' : (e.area / initOpen * 100).toFixed(1) + '%'), cx2, ty);
-    if (isStock() && !e.out) { ctx.fillStyle = e.col; ctx.fillText('♥'.repeat(Math.max(0, Math.min(5, e.stock | 0))), cx2, ty + 14); }
+    if (isStock() && !e.out && !clock) { ctx.fillStyle = e.col; ctx.fillText('♥'.repeat(Math.max(0, Math.min(5, e.stock | 0))), cx2, ty + 14); }
   });
   ctx.textAlign = 'left'; ctx.fillStyle = myRank === 1 ? '#7bffa0' : '#ffffff'; ctx.font = "bold 12px 'Courier New', monospace";
   ctx.fillText(myRank + '位/' + rk.length + '人', x - 110, y + 12);
   ctx.textAlign = 'center';
   const tm = Math.ceil(vsT);
   ctx.fillStyle = tm <= 10 ? '#ff8fa8' : '#ffd76b'; ctx.font = "bold 16px 'Courier New', monospace";
-  ctx.fillText(isStock() ? '残機制' : Math.floor(tm / 60) + ':' + String(tm % 60).padStart(2, '0'), W / 2, y - 8);   // 残り時間はバーの上(下は色ごとの割合)
+  if (clock) ctx.fillStyle = '#9dffea';
+  ctx.fillText(clock || (isStock() ? '残機制' : Math.floor(tm / 60) + ':' + String(tm % 60).padStart(2, '0')), W / 2, y - 8);   // 残り時間はバーの上(下は色ごとの割合)
 }
 
 /* ---------------- SPARX ---------------- */
@@ -4733,7 +4734,7 @@ let galRects = [];
    再生中はこの4つを一時的に昔の盤面に差しかえて、いつもの描き方(平面・立体)でそのまま描く。
    勝った試合なら、再生しながら小さな絵を撮ってギャラリーの作品につける(ギャラリーで動く) */
 const LAPSE_EVERY = 1.0, LAPSE_PLAY = 5, LAPSE_CAPS = 16, LAPSE_KEEP = 8;
-let lapse = { id: 0, base: null, last: null, frames: [], t: 0 };
+let lapse = { id: 0, base: null, last: null, frames: [], t: 0, clock: 0, sh0: null };
 let lapsePlay = null;
 const lapseBtn = { x: 0, y: 0, w: 170, h: 40 };
 function lapseSnap() {
@@ -4742,12 +4743,25 @@ function lapseSnap() {
   return { g, a: colA.slice(), m: mixA.slice(), o: ownA.length === g.length ? ownA.slice() : new Uint8Array(g.length) };
 }
 function lapseReset() {
-  lapse = { id: lapse.id + 1, base: lapseSnap(), last: null, frames: [], t: 0 };
+  lapse = { id: lapse.id + 1, base: lapseSnap(), last: null, frames: [], t: 0, clock: 0, sh0: null };
   lapse.last = lapseSnap();
+  lapse.sh0 = lapseShares(lapse.base);
+}
+// 盤面の記録から、全員の陣地の割合(0 = 自分、1〜 = CPU の順)
+function lapseShares(sn) {
+  const n = new Float32Array(rivals.length + 1);
+  if (!initOpen) return n;
+  for (let i = 0; i < sn.g.length; i++) {
+    if (sn.g[i] !== WALL || baseA[i]) continue;
+    const o = sn.o[i];
+    if (o === 1 || o === 0) n[0]++; else if (o >= 2 && o - 2 < rivals.length) n[o - 1]++;
+  }
+  for (let k = 0; k < n.length; k++) n[k] /= initOpen;
+  return n;
 }
 function lapseRecord(dt, force) {
   if (!lapse.base || lapse.base.g.length !== surf.N) return;
-  lapse.t += dt;
+  lapse.t += dt; lapse.clock += dt;
   if (!force && lapse.t < LAPSE_EVERY) return;
   lapse.t = 0;
   const now = lapseSnap(), L = lapse.last, idx = [];
@@ -4755,6 +4769,7 @@ function lapseRecord(dt, force) {
   if (!idx.length) return;
   const f = { i: Int32Array.from(idx), g: new Uint8Array(idx.length), a: new Uint8Array(idx.length), m: new Uint8Array(idx.length), o: new Uint8Array(idx.length) };
   idx.forEach((c, k) => { f.g[k] = now.g[c]; f.a[k] = now.a[c]; f.m[k] = now.m[c]; f.o[k] = now.o[c]; });
+  f.t = lapse.clock; f.sh = lapseShares(now);
   lapse.frames.push(f);
   lapse.last = now;
 }
@@ -4762,27 +4777,52 @@ function canLapse() { return state === 'vsres' && !lapsePlay && lapse.frames.len
 function startLapse() {
   if (!canLapse()) return false;
   const b = lapse.base;
-  lapsePlay = { i: 0, t: 0, hold: 0, save: { grid, colA, mixA, ownA }, caps: [], capEvery: Math.max(1, Math.round(lapse.frames.length / LAPSE_CAPS)) };
+  const end = lapse.frames[lapse.frames.length - 1].t || 1;
+  lapsePlay = { i: 0, T: 0, end, hold: 0, save: { grid, colA, mixA, ownA, claimed }, caps: [], capEvery: Math.max(1, Math.round(lapse.frames.length / LAPSE_CAPS)) };
   grid = b.g.slice(); colA = b.a.slice(); mixA = b.m.slice(); ownA = b.o.slice();
+  lapseClaimed(); hudAnim = {};
   lapseRedraw(); resHide = true; resIdle = 9;
   floats = []; particles = []; rings = []; speech.t = 0;
   Snd.select();
   return true;
 }
-function applyLapseFrame(f) {
-  for (let k = 0; k < f.i.length; k++) { const c = f.i[k]; grid[c] = f.g[k]; colA[c] = f.a[k]; mixA[c] = f.m[k]; ownA[c] = f.o[k]; }
+// 1コマぶんの変化を盤面にのせる。新しく塗られたマスは、塗りの波で広がって見える(光らせない)
+function applyLapseFrame(f, dur) {
+  const P = surf.pos, fresh = [];
+  for (let k = 0; k < f.i.length; k++) {
+    const c = f.i[k];
+    if (grid[c] !== WALL && f.g[k] === WALL && f.a[k]) fresh.push(c);
+    grid[c] = f.g[k]; colA[c] = f.a[k]; mixA[c] = f.m[k]; ownA[c] = f.o[k];
+  }
+  if (fresh.length && dur > 0) {
+    let o = fresh[0], cx = 0, cy = 0, cz = 0;                   // 波は、塗られたところの端(まん中からいちばん遠いマス)から
+    for (const c of fresh) { cx += P[c * 3]; cy += P[c * 3 + 1]; cz += P[c * 3 + 2]; }
+    cx /= fresh.length; cy /= fresh.length; cz /= fresh.length;
+    let far = -1;
+    for (const c of fresh) { const d = Math.hypot(P[c * 3] - cx, P[c * 3 + 1] - cy, P[c * 3 + 2] - cz); if (d > far) { far = d; o = c; } }
+    let maxD = 1e-6;
+    const ds = fresh.map(c => { const d = Math.hypot(P[c * 3] - P[o * 3], P[c * 3 + 1] - P[o * 3 + 1], P[c * 3 + 2] - P[o * 3 + 2]); if (d > maxD) maxD = d; return d; });
+    fresh.forEach((c, k) => { claimAt[c] = blinkT + ds[k] / maxD * dur; });
+    if (blinkT + dur + 0.35 > waveUntil) waveUntil = blinkT + dur + 0.35;
+  }
+  lapseClaimed();
   lapseRedraw();
+}
+// 再生中の広さ: 順位バーの色ごとの割合と、上の全体の占領率を、その時点の盤面で数え直す
+function lapseClaimed() {
+  recountAreas();
+  let n = 0; for (let i = 0; i < grid.length; i++) if (grid[i] === WALL && !baseA[i]) n++;
+  claimed = n;
 }
 // 盤面を描き直す(平面は焼き込み直し、立体は線の色のキャッシュを捨てるだけ)
 function lapseRedraw() { lineCacheT = -99; if (!surf.is3D) redrawField(); }
 function updateLapse(dt) {
-  const P = lapsePlay, n = lapse.frames.length, step = Math.max(0.03, LAPSE_PLAY / n);
-  if (P.i >= n) { P.hold += dt; if (P.hold > 1.4) endLapse(true); return; }
-  P.t += dt;
-  while (P.t >= step && P.i < n) {
-    P.t -= step;
+  const P = lapsePlay, n = lapse.frames.length, speed = P.end / LAPSE_PLAY;   // 試合の時間を LAPSE_PLAY 秒に縮める
+  if (P.i >= n) { P.hold += dt; if (P.hold > 1.8) endLapse(true); return; }
+  P.T = Math.min(P.end, P.T + dt * speed);
+  while (P.i < n && lapse.frames[P.i].t <= P.T) {
     if (P.i % P.capEvery === 0) lapseCapture();          // 直前に描いた画面を1枚
-    applyLapseFrame(lapse.frames[P.i++]);
+    applyLapseFrame(lapse.frames[P.i++], Math.min(0.5, LAPSE_EVERY / speed * 0.9));
   }
 }
 // いまの画面を小さな絵にする(平面は焼き込んだフィールド、立体は画面の真ん中)
@@ -4810,7 +4850,8 @@ function endLapse(done) {
   const P = lapsePlay;
   if (!P) return;
   lapseCapture();
-  grid = P.save.grid; colA = P.save.colA; mixA = P.save.mixA; ownA = P.save.ownA;
+  grid = P.save.grid; colA = P.save.colA; mixA = P.save.mixA; ownA = P.save.ownA; claimed = P.save.claimed;
+  waveUntil = 0; recountAreas(); hudAnim = {};
   lapseRedraw(); if (!vsWin) sealRemaining(); resHide = false;
   lapsePlay = null;
   const g = gallery[0];
@@ -4830,16 +4871,52 @@ function drawLapseBtn() {
   ctx.fillText('▶ タイムラプス(T)', lapseBtn.x + lapseBtn.w / 2, lapseBtn.y + 26);
 }
 function drawLapseHud() {
-  const P = lapsePlay, n = lapse.frames.length, k = Math.min(1, (P.i + P.t / Math.max(0.03, LAPSE_PLAY / n)) / n);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, FIELD_Y + 4, W, 44);
-  ctx.fillStyle = '#9dffea'; ctx.font = "bold 15px 'Courier New', monospace";
-  const sec = Math.round(k * n * LAPSE_EVERY);
-  ctx.fillText('タイムラプス  ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'), W / 2, FIELD_Y + 24);
-  ctx.fillStyle = '#2a3150'; ctx.fillRect(W / 2 - 160, FIELD_Y + 34, 320, 6);
-  ctx.fillStyle = '#9dffea'; ctx.fillRect(W / 2 - 160, FIELD_Y + 34, 320 * k, 6);
-  ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 12px 'Courier New', monospace";
-  ctx.fillText('どれかのキー / タップ でとめる', W / 2, H - 24);
+  const P = lapsePlay, T = P.T, sec = Math.round(T);
+  drawVsHud(Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'));   // その時点の色ごとの割合
+  // 陣地の推移グラフ(全員の割合の線。再生といっしょに伸びる)
+  const gx = 70, gw = W - 190, gh = 118, gy = H - 34 - gh;
+  ctx.fillStyle = 'rgba(4,6,16,0.72)'; ctx.fillRect(gx - 14, gy - 26, gw + 132, gh + 52);
+  ctx.strokeStyle = 'rgba(157,255,234,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(gx - 13.5, gy - 25.5, gw + 131, gh + 51);
+  const fr = lapse.frames, top = Math.max(0.1, ...fr.map(f => Math.max(...f.sh)));
+  const ymax = Math.min(1, Math.ceil(top * 10 + 0.5) / 10);
+  const px = t => gx + gw * t / P.end, py = v => gy + gh - gh * v / ymax;
+  // 目盛り(10%ごと)
+  ctx.font = "10px 'Courier New', monospace"; ctx.textAlign = 'right';
+  for (let v = 0; v <= ymax + 1e-6; v += ymax > 0.5 ? 0.2 : 0.1) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.moveTo(gx, py(v)); ctx.lineTo(gx + gw, py(v)); ctx.stroke();
+    ctx.fillStyle = '#6d7ba8'; ctx.fillText(Math.round(v * 100) + '%', gx - 4, py(v) + 3);
+  }
+  const cols = [teamHex(0)].concat(rivals.map(r => teamHex(r.team))), names = ['YOU'].concat(rivals.map(r => r.name));
+  const tips = [];
+  for (let k = cols.length - 1; k >= 0; k--) {           // 自分をいちばん上に描く
+    const path = new Path2D();
+    path.moveTo(px(0), py(lapse.sh0 ? lapse.sh0[k] || 0 : 0));
+    let last = lapse.sh0 ? lapse.sh0[k] || 0 : 0;
+    for (let i = 0; i < P.i; i++) { path.lineTo(px(fr[i].t), py(last)); last = fr[i].sh[k] || 0; path.lineTo(px(fr[i].t), py(last)); }
+    path.lineTo(px(T), py(last));
+    ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.25; ctx.strokeStyle = cols[k]; ctx.lineWidth = k === 0 ? 7 : 5; ctx.stroke(path);
+    ctx.globalAlpha = 1; ctx.lineWidth = k === 0 ? 3 : 2; ctx.stroke(path);
+    if (k === 0) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.stroke(path); }   // 自分の線は白い芯
+    ctx.restore();
+    tips.push({ y: py(last), v: last, col: cols[k], name: names[k] });
+  }
+  // 線の先の名前と%(重ならないように少しずらす)
+  tips.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < tips.length; i++) if (tips[i].y - tips[i - 1].y < 11) tips[i].y = tips[i - 1].y + 11;
+  const over = tips.length ? tips[tips.length - 1].y - (gy + gh + 4) : 0;   // 下にはみ出すぶんは全体を上へ
+  if (over > 0) for (const tp of tips) tp.y -= over;
+  ctx.textAlign = 'left'; ctx.font = "bold 10px 'Courier New', monospace";
+  for (const tp of tips) {
+    ctx.fillStyle = tp.col; ctx.beginPath(); ctx.arc(px(T), py(tp.v), 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillText(tp.name + ' ' + (tp.v * 100).toFixed(1) + '%', gx + gw + 8, tp.y + 3);
+  }
+  // 見出しと、いまの位置
+  ctx.textAlign = 'left'; ctx.fillStyle = '#9dffea'; ctx.font = "bold 13px 'Courier New', monospace";
+  ctx.fillText('▶ タイムラプス', gx - 6, gy - 9);
+  ctx.strokeStyle = 'rgba(157,255,234,0.5)'; ctx.beginPath(); ctx.moveTo(px(T), gy); ctx.lineTo(px(T), gy + gh); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 12px 'Courier New', monospace";
+  ctx.fillText('どれかのキー / タップ でとめる', W / 2, H - 12);
 }
 
 /* ---- あそびかた(ヘルプ)。タイトルの H キー、ポーズメニューから ---- */
@@ -5178,6 +5255,7 @@ function drawDiamond(px, py, r) {
 }
 // SPARX = バチッコ: 線の上を走る火の玉。暗いふちどりの丸い体に、怒った目と揺れる炎の髪。点滅はしない
 function drawSparx(px, py, s) {
+  if (lapsePlay) return;                               // タイムラプス中は盤面だけ見せる
   const waiting = s.wait > 0;
   ctx.globalAlpha = waiting ? 0.4 : 1;
   // 走った跡の炎の尾
@@ -5598,6 +5676,7 @@ function qixTentacles(q) {
   return arms.filter(a => a.length > 1 && Math.hypot(a[a.length - 1].x - a[0].x, a[a.length - 1].y - a[0].y) < 200);
 }
 function drawNumerin(q, faint) {
+  if (lapsePlay) return;                               // タイムラプス中は盤面だけ見せる
   const c = surf.qixScreen(q), col = qixStroke(q.hue, 62, 1), dark = qixStroke(q.hue, 22, 1);
   ctx.globalAlpha = faint ? 0.3 : 1;
   // 触手: 根元が太く先が細い、ゆっくりうねる線。突進の予告中は白っぽくなる(点滅はしない)
