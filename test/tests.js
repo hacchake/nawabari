@@ -22,16 +22,17 @@ assert('初期占領率0%', percent() === 0);
 let m = steps(-1, 0, 10);
 assert('壁沿いに10歩移動', m === 10, m);
 
-// ---- 3) 描画→停止→導火線→ミス ----
+// ---- 3) 描画→ミス ----
 held.fast = false;
 m = steps(0, -1, 1);
 assert('方向キーだけで空き地へ進むと遅い線(×2)を引き始める', m === 1 && player.drawing && !player.usedFast);
 held.fast = true;
 m = steps(0, -1, 29);
 assert('Zを押すと速い線(×1)になる', m === 29 && trail.length === 30 && player.usedFast, m + '/' + trail.length);
-for (let i = 0; i < 120 && deathTimer <= 0; i++) updateFuse(1/30, false);
-assert('導火線点火', fuse.lit);
-assert('導火線でミス発生', deathTimer > 0, deathTimer.toFixed(2));
+for (let i = 0; i < 120; i++) update(1/60);
+assert('止まっていても導火線はない(ミスにならない)', deathTimer <= 0 && player.drawing);
+death('テスト');
+assert('ミス発生', deathTimer > 0, deathTimer.toFixed(2));
 applyDeath();
 assert('軌跡が消えている', countCells(TRAIL) === 0 && !player.drawing);
 assert('残機が減少', lives === settings.lives - 1, lives);
@@ -91,10 +92,7 @@ optSel = OPT_ITEMS.findIndex(o => o.k === 'diff');
 settings.diff = 'NORMAL';
 adjustOpt(1);
 assert('難易度がHARDへ巡回', settings.diff === 'HARD', settings.diff);
-const fuseHard = effFuseDelay();
 settings.diff = 'NORMAL';
-const fuseNorm = effFuseDelay();
-assert('HARDは導火線猶予が短い', fuseHard < fuseNorm, fuseHard + ' < ' + fuseNorm);
 optSel = 0; settings.bgm = 6; adjustOpt(1);
 assert('BGM音量+1', settings.bgm === 7, settings.bgm);
 
@@ -240,9 +238,8 @@ settings.mode = 'CUBE'; startGame(); stTimer = 2; tickMeta(0.016);
   const f1 = face(player.c);
   for (let i = 0; i < 5; i++) { playerMove('down'); tickMeta(1/30); }
   assert('立方体: 継ぎ目の先でも同じ面を直進', face(player.c) === f1 && player.drawing, face(player.c));
-  // 導火線でミス → 軌跡は消える
-  for (let i = 0; i < 400 && deathTimer <= 0; i++) updateFuse(1/30, false);
-  applyDeath();
+  // ミス → 軌跡は消える
+  death('テスト'); applyDeath();
   assert('立方体: ミスで軌跡が消え陣地に戻る', countCells(TRAIL) === 0 && isBoundary(player.c) && face(player.c) === 0);
 }
 
@@ -525,40 +522,6 @@ settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016); player.invul
 assert('スクリーンショットはtoBlobが無い環境では何もしない', saveShot() === false);
 
 
-// ---- 40) SEEKER ----
-{
-  settings.mode = 'PLANE';
-  startGame(); initLevel(3);
-  assert('AREA3までSEEKERなし', seekers.length === 0);
-  initLevel(4); setState('play');
-  assert('AREA4でSEEKER出現(空き地)', seekers.length === 1 && grid[seekers[0].c] === OPEN);
-  for (let i = 0; i < 300; i++) updateSeekers(1/60);
-  assert('SEEKERは空き地を動く', grid[seekers[0].c] === OPEN);
-  // 追跡: 線を引いている最中は自機へ近づく
-  player.invuln = 99; held.fast = false; steps(0, -1, 3);
-  const P = surf.pos, dist = c => Math.hypot(P[c * 3] - P[player.c * 3], P[c * 3 + 1] - P[player.c * 3 + 1]);
-  const d0 = dist(seekers[0].c);
-  for (let i = 0; i < 20; i++) stepSeeker(seekers[0]);
-  assert('線を引いている間は自機へ近づく', dist(seekers[0].c) < d0, d0.toFixed(1) + '→' + dist(seekers[0].c).toFixed(1));
-  // 囲んで倒す: SEEKERを自機の近くに置いて囲う
-  applyDeath(); player.invuln = 99; lives = 3;
-  const x0 = player.c % GW;
-  seekers[0].c = idx(x0 - 2, GH - 3);
-  const sc0 = score;
-  steps(0, -1, 4); steps(-1, 0, 4); steps(0, 1, 6);
-  assert('囲むとSEEKERを倒してボーナス', seekers.length === 0 && score - sc0 >= CONFIG.SEEKER_BONUS, 'n=' + seekers.length);
-  // 描きかけの線に触れるとミス
-  initLevel(4); setState('play'); player.invuln = 0; steps(0, -1, 3);
-  seekers[0].c = trail[1]; seekers[0].acc = 0; player.invuln = 0;
-  grid[trail[1]] = TRAIL;
-  seekers[0].c = surf.nb[trail[1] * 4 + 1]; seekers[0].prev = -1;
-  if (grid[seekers[0].c] === OPEN) { seekers[0].acc = 0; for (let i = 0; i < 50 && deathTimer <= 0; i++) { stepSeeker(seekers[0]); if (grid[seekers[0].c] === TRAIL || seekers[0].c === player.c) death(); } }
-  assert('線に触れるとミス', deathTimer > 0);
-  let err = null; try { render(); settings.mode = 'SPHERE'; startGame(); initLevel(5); setState('play'); render(); } catch (e) { err = e.stack; }
-  assert('SEEKERの描画が例外なし', !err, err);
-}
-
-
 // ---- 41) 音の反応(AudioContext無しでも安全) ----
 {
   let err = null;
@@ -665,7 +628,7 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 // ---- 49) BONUS AREA ----
 {
   settings.mode = 'PLANE'; startGame(); level = 5; initLevel(5); setState('play');
-  assert('AREA5はBONUS AREA(SPARX/SEEKERなし・制限時間あり)', bonusT > 0 && sparxes.length === 0 && seekers.length === 0, bonusT);
+  assert('AREA5はBONUS AREA(SPARXなし・制限時間あり)', bonusT > 0 && sparxes.length === 0, bonusT);
   player.invuln = 99; held.fast = true; steps(0, -1, 20); steps(-1, 0, 20); steps(0, 1, 30);
   const pct = percent(), sc = score;
   for (let i = 0; i < 60 * 45 && state === 'play'; i++) update(1/60);
@@ -881,10 +844,9 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 // ---- 67) ZAP ----
 {
   settings.mode = 'PLANE'; startGame(); level = 4; initLevel(4); setState('play');
-  assert('準備: SPARXとSEEKERがいる', sparxes.length > 0 && seekers.length > 0);
+  assert('準備: SPARXがいる', sparxes.length > 0);
   items = [{ c: 0, k: 'zap', t: 0 }]; grid[0] = WALL; collectItems();
-  const c0 = seekers[0].c; updateSeekers(1);
-  assert('ZAPでSPARX一掃・SEEKERは止まる', sparxes.length === 0 && seekers[0].c === c0 && seekers[0].stun > 0);
+  assert('ZAPでSPARX一掃', sparxes.length === 0);
   for (let i = 0; i < 60 * 20; i++) updateSparxes(1/60);
   assert('SPARXはしばらくするとまた出る', sparxes.length > 0);
 }
@@ -1036,23 +998,6 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 83) 短い線では導火線に火がつかない(自機のすぐそばに火が出ない) ----
-{
-  settings.mode = 'PLANE'; startGame(); setState('play'); qixes = []; sparxList = []; seekers = [];
-  fuseReset(); player.drawing = true; trail = [0, 1, 2];
-  for (let i = 0; i < 120; i++) updateFuse(1 / 60, false);
-  assert('3マスの線では点火しない', !fuse.lit);
-  // 線は長くても、書き始めが自機のすぐそばなら点火しない(平面1マス=5px)
-  trail = Array.from({ length: 40 }, (_, i) => i); player.c = GW;
-  for (let i = 0; i < 60; i++) updateFuse(1 / 60, false);
-  assert('書き始めが画面上で近いと点火しない', !fuse.lit);
-  trail = Array.from({ length: 40 }, (_, i) => i); player.c = 60;
-  for (let i = 0; i < 60; i++) updateFuse(1 / 60, false);
-  assert('書き始めが離れていれば点火する', fuse.lit);
-  fuseReset(); player.drawing = false; trail = [];
-}
-
-
 // ---- 84) コンティニューするとスコアは0から(ハイスコアは残る) ----
 {
   settings.mode = 'PLANE'; startGame(); score = 123456; saveHi(); setState('over'); stTimer = 0;
@@ -1064,7 +1009,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 // ---- 85) いろいろな色のインク・虹・アイテム ----
 {
   settings.mode = 'PLANE'; settings.ink = 'MIX'; settings.theme = THEMES.length; startGame(); setState('play');
-  qixes = []; sparxList = []; seekers = []; items = [];
+  qixes = []; sparxList = []; items = [];
   assert('平面は INK テーマ', inkMode());
   const seen = new Set();
   for (let i = 0; i < 40; i++) { nextInk(); seen.add(ink.i); }
@@ -1080,7 +1025,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
   const want = INK_BASE + ink.i;
   // 本当に線を閉じて、塗られた色がローラーの色と同じか
   settings.mode = 'PLANE'; startGame(); setState('play'); qixes = qixes.slice(0, 1); items = [];
-  qixes[0].x = GW / 2; qixes[0].y = GH / 2; sparxes = []; seekers = [];
+  qixes[0].x = GW / 2; qixes[0].y = GH / 2; sparxes = [];
   const rollerCol = inkHex();
   held.fast = false; steps(0, -1, 6); steps(1, 0, 6); steps(0, 1, 6);
   const got = new Set(); for (let c = 0; c < surf.N; c++) if (grid[c] === WALL && colA[c] >= INK_BASE) got.add(palHex(colA[c]));
@@ -1114,16 +1059,11 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 86) ミスの原因が出る・方向キーを押している間は導火線が燃えない ----
+// ---- 86) ミスの原因が出る ----
 {
   settings.mode = 'PLANE'; startGame(); setState('play'); player.invuln = 0; deathTimer = 0;
   floats.length = 0; death('テスト');
   assert('ミスの原因を表示', lastDeath === 'テスト' && floats.some(f => f.txt === 'ミス: テスト'));
-  deathTimer = 0; player.invuln = 0;
-  fuseReset(); player.drawing = true; trail = Array.from({ length: 60 }, (_, i) => i); player.c = 70;
-  for (let i = 0; i < 120; i++) updateFuse(1 / 60, true);   // 押しているが進めない
-  assert('方向キーを押している間は点火しない', !fuse.lit);
-  fuseReset(); player.drawing = false; trail = [];
 }
 
 
@@ -1131,7 +1071,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 {
   const run = (setup) => {
     settings.mode = 'PLANE'; settings.ink = 'MIX'; startGame(); setState('play');
-    qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.8; sparxes = []; seekers = []; items = [];
+    qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.8; sparxes = []; items = [];
     setup();
     held.fast = false; steps(0, -1, 14); steps(1, 0, 14); steps(0, 1, 14);
     const ms = new Set(); let n = 0;
@@ -1285,7 +1225,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 
 // ---- 93) 自由移動(平面) ----
 {
-  settings.mode = 'PLANE'; startGame(); setState('play'); sparxes = []; seekers = []; items = [];
+  settings.mode = 'PLANE'; startGame(); setState('play'); sparxes = []; items = [];
   qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.3;
   for (const k of ['up', 'down', 'left', 'right']) releaseDir(k);
   assert('斜めの入力は正規化される', (() => { pressDir('up'); pressDir('right'); const v = inputVec(); releaseDir('up'); releaseDir('right'); return Math.abs(Math.hypot(v[0], v[1]) - 1) < 1e-9 && v[0] > 0 && v[1] < 0; })());
@@ -1309,7 +1249,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 }
 // ---- 94) ナワバリバトル(CPU) ----
 {
-  settings.mode = 'VS'; startGame(); setState('play'); sparxes = []; seekers = []; items = [];
+  settings.mode = 'VS'; startGame(); setState('play'); sparxes = []; items = [];
   assert('VS: CPUは3人・全員別の色・制限時間', rivals.length === 3 && new Set(rivals.map(r => r.team).concat([0])).size === 4 && vsT === CONFIG.VS_TIME && qixes.length === 1);
   const r = rivals[0];
   assert('CPUは線の上から始まる', isBoundary(r.c));

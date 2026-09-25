@@ -157,10 +157,6 @@ const CONFIG = {
   SPARX_INTERVAL: 25,   // 追加SPARXの出現間隔(秒)
   SPARX_MAX: 6,         // SPARX最大数
 
-  FUSE_DELAY: 0.5,      // 停止→導火線点火までの猶予(秒)
-  FUSE_SPEED: 34,       // 導火線の速度(セル/秒)
-  FUSE_MIN: 10,         // 線がこのマス数より短い間は点火しない(立体は半分)
-  FUSE_MIN_PX: 130,     // 火の出る場所(線の書き始め)が自機からこのピクセル以内なら点火しない
 
   /* -- ゲーム進行 ---------------------------------------------- */
   LIVES: 3,             // 残機の既定値(OPTIONSで変更可)
@@ -178,10 +174,6 @@ const CONFIG = {
   BONUS_TIME: 40,       // BONUS AREA の制限時間(秒)
   BONUS_PTS: 200,       // BONUS AREA の占領率1%あたりのボーナス
 
-  /* -- SEEKER(追跡者) --------------------------------------------- */
-  SEEKER_FROM: 4,       // このエリアから SEEKER が出る(8エリア目から2体)
-  SEEKER_SPEED: 7,      // SEEKER の速さ(セル/秒。盤面の speed 倍率がかかる)
-  SEEKER_BONUS: 1500,   // 囲んで倒したときのボーナス
 
   /* -- アイテム・コンボ ---------------------------------------- */
   ITEM_INTERVAL: 11,    // アイテムが出る間隔(秒)
@@ -251,7 +243,7 @@ const ITEMS = {
   shield: { label:'SHIELD', mark:'◆', col:'#8dff9e', w:3, txt:'1回だけミスを防ぐ' },
   star:   { label:'STAR',   mark:'★', col:'#ffd76b', w:3, txt:'得点2倍' },
   life:   { label:'1UP',    mark:'♥', col:'#ff9ee8', w:1, txt:'残機+1' },
-  zap:    { label:'ZAP',    mark:'✦', col:'#ff7a4a', w:2, txt:'バチッコを一掃・オイカケがしびれる' },
+  zap:    { label:'ZAP',    mark:'✦', col:'#ff7a4a', w:2, txt:'バチッコを一掃' },
   over:   { label:'上塗り', mark:'⟳', col:'#ffffff', w:5, txt:'しばらく陣地の上を走って相手の色を上塗り(混ざると中立)' },
 };
 function pickItemKind() {
@@ -784,7 +776,6 @@ const ACHV = [
   { id:'slowonly', name:'じっくり派',     txt:'Zを使わずにエリアクリア' },
   { id:'big30',    name:'大風呂敷',       txt:'一度に30%以上を囲む' },
   { id:'combo',    name:'れんぞく技',     txt:'コンボ倍率を最大(×3)にする' },
-  { id:'seeker',   name:'追っ手を撃退',   txt:'オイカケを囲んで倒す' },
   { id:'items',    name:'コレクター',     txt:'全種類のアイテムを取る' },
   { id:'area10',   name:'遠くまで来た',   txt:'AREA 10 に到達' },
   { id:'klein',    name:'裏も表もない',   txt:'クラインの壺をクリア' },
@@ -2094,7 +2085,6 @@ let claimAt = new Float32Array(0), waveFrom = 0, waveUntil = 0;
 let ringA = new Uint8Array(0);  // 年輪模様: 占領したときの「閉じた場所からの距離」の縞(0/1)
 let rings = [];                 // 囲んだ瞬間の光の輪
 let items = [], itemTimer = 0;  // アイテム { c:セル, k:種類, t:経過秒 }
-let seekers = [];               // SEEKER { c:セル, prev, acc, ph }
 let slowT = 0, starT = 0;       // SLOW / STAR の残り時間
 let combo = 0, comboT = 0;      // コンボ数 / 次のコンボまでの残り時間
 let guarded = false;            // SHIELD でミスを防いだ最中
@@ -2123,7 +2113,6 @@ let areaMiss = 0, areaFast = false;   // このエリアでのミス数 / Zを�
 const player = { c:0, prev:-1, lastDir:null, acc:0, drawing:false, usedFast:false, invuln:0, look:1, moveT:-9, shield:false,
                  fx:0.5, fy:0.5, vx:0, vy:-1, pts:[] };   // fx,fy: 平面での連続した位置(マス単位) / pts: 描いた道すじ
 let trail = [], trailStart = -1;  // 軌跡(セル番号の列) / 描画を始めたセル
-const fuse = { wait:0, pos:0, lit:false, sndT:0 };
 let qixes = [];
 let sparxes = [], sparxTimer = 0;
 let particles = [], floats = [];
@@ -2719,7 +2708,6 @@ function initLevel(lv) {
   ringA = new Uint8Array(surf.N);
   waveUntil = 0; rings = [];
   items = []; itemTimer = CONFIG.ITEM_INTERVAL * 0.6;
-  seekers = [];
   slowT = 0; starT = 0; combo = 0; comboT = 0; guarded = false; areaTime = 0;
   ink.rainbowT = 0; nextInk();
   areaMiss = 0; areaFast = false;
@@ -2740,7 +2728,6 @@ function initLevel(lv) {
   player.acc = 0; player.drawing = false; player.usedFast = false; player.invuln = 0; player.pts = []; player.overT = 0;
   player.fx = null; syncPos(player);
   trail = []; trailStart = -1;
-  fuseReset();
   if (surf.is3D) {
     camSnap([surf.dir[player.c * 3], surf.dir[player.c * 3 + 1], surf.dir[player.c * 3 + 2]]);
     if (state !== 'title') cam.D = 9;   // ワープ: 遠くから飛び込んでくる(updateCamera が 3.4 へ寄せる)
@@ -2761,9 +2748,7 @@ function initLevel(lv) {
   const ns = bonus || !bachikkoOn() ? 0 : Math.min(4, surf.def.sparxStart + ((lv - 1) >> 1));   // BONUS AREA は SPARX なし
   for (let i = 0; i < ns; i++) spawnSparx(i % 2 ? 1 : -1, surf.def.sparxWait + i * 1.5 * (surf.def.sparxWait > 0));
   sparxTimer = CONFIG.SPARX_INTERVAL * diff().interval;
-  // SEEKER は盤面ができて自機の位置が決まってから出す
   if (bonus || !bachikkoOn()) sparxTimer = Infinity;
-  if (lv >= CONFIG.SEEKER_FROM && !bonus) for (let i = 0; i < (lv >= CONFIG.SEEKER_FROM + 4 ? 2 : 1); i++) spawnSeeker();
   // 最初からある壁(外枠・HOME)
   baseA = new Uint8Array(surf.N);
   for (let i = 0; i < surf.N; i++) if (grid[i] === WALL) baseA[i] = 1;
@@ -3092,7 +3077,6 @@ function playerStep(n) {
       player.drawT = blinkT;
       trailStart = player.c;
       trail = [];
-      fuseReset();
       Snd.startDraw(!held.fast);
       enterTrail(n);
       return true;
@@ -3142,7 +3126,6 @@ function closeTrail() {
       claimed += gained;
       score += gained * mul;
       collectItems();
-      crushSeekers();
       for (const q of crushed) {
         const sp = surf.qixScreen(q);
         spawnParticles(sp.x, sp.y, 42, theme().accent);
@@ -3151,7 +3134,6 @@ function closeTrail() {
       floats.push({ x: W / 2, y: H * 0.4, txt: 'ヌメリン まっぷたつ!!', t: 2.0, col: theme().accent, big: true });
       trail = [];
       player.drawing = false;
-      fuseReset();
       redrawField();
       snapPlayerToBoundary();
       shakeT = 0.4;
@@ -3190,7 +3172,6 @@ function closeTrail() {
   nextInk();                     // 次の線は別の色
 
   collectItems();
-  crushSeekers();
   if (gained > 0) { stats.claims++; stats.cells += gained; }
   if (gained > 0) {
     // コンボ: 前に囲んでから COMBO_TIME 秒以内なら倍率アップ
@@ -3232,121 +3213,19 @@ function closeTrail() {
 
   trail = [];
   player.drawing = false;
-  fuseReset();
   redrawField();
   snapPlayerToBoundary();
 
   if (percent() >= matchTarget()) { if (isVS()) vsEnd(); else startClear(false); }
 }
 
-/* ---------------- SEEKER(追跡者) ---------------- */
-// 自機からいちばん遠いあたりの空き地に出す
-function spawnSeeker() {
-  const P = surf.pos, pc = player.c * 3;
-  let best = -1, bd = -1;
-  for (let tries = 0; tries < 200; tries++) {
-    const c = (Math.random() * surf.N) | 0;
-    if (grid[c] !== OPEN) continue;
-    const d = (P[c * 3] - P[pc]) ** 2 + (P[c * 3 + 1] - P[pc + 1]) ** 2 + (P[c * 3 + 2] - P[pc + 2]) ** 2;
-    if (d > bd) { bd = d; best = c; }
-  }
-  if (best >= 0) seekers.push({ c: best, prev: -1, acc: 0, ph: rand(0, 6) });
-}
-function stepSeeker(k) {
-  const nb = surf.nb, P = surf.pos, c = k.c, cands = [];
-  for (let i = 0; i < 4; i++) { const n = nb[c * 4 + i]; if (n >= 0 && grid[n] !== WALL) cands.push(n); }
-  if (!cands.length) return;
-  let next;
-  if (player.drawing && Math.random() < 0.8) {
-    // 線を引いている間は自機へ寄っていく(距離がいちばん縮む隣へ)
-    const t = player.c * 3;
-    let bd = Infinity;
-    for (const n of cands) {
-      const d = (P[n * 3] - P[t]) ** 2 + (P[n * 3 + 1] - P[t + 1]) ** 2 + (P[n * 3 + 2] - P[t + 2]) ** 2;
-      if (d < bd) { bd = d; next = n; }
-    }
-  } else {
-    // ふだんはふらふら(なるべく直進、戻らない)
-    const kp = k.prev >= 0 ? nbIndex(c, k.prev) : -1;
-    const straight = kp >= 0 ? nb[c * 4 + ((kp + 2) & 3)] : -1;
-    const opts = cands.filter(n => n !== k.prev);
-    next = opts.includes(straight) && Math.random() < 0.85 ? straight : pick(opts.length ? opts : cands);
-  }
-  k.prev = c; k.c = next;
-}
-function updateSeekers(dt) {
-  const spd = CONFIG.SEEKER_SPEED * surf.def.speed * diff().qix * enemySlow();
-  for (const k of seekers) {
-    k.ph += dt;
-    if (k.stun > 0) { k.stun -= dt; continue; }   // ZAP でしびれている
-    k.acc += dt * spd;
-    while (k.acc >= 1) {
-      k.acc -= 1;
-      stepSeeker(k);
-      if (grid[k.c] === TRAIL || (player.drawing && k.c === player.c)) { death('オイカケにつかまった'); return; }
-    }
-  }
-}
-// 囲まれて空き地から追い出された SEEKER は倒れる
-function crushSeekers() {
-  for (const k of seekers.filter(k => grid[k.c] === WALL)) {
-    seekers.splice(seekers.indexOf(k), 1);
-    const p = surf.screenOf(k.c);
-    score += CONFIG.SEEKER_BONUS;
-    unlock('seeker');
-    stats.seekers++;
-    floats.push({ x: p.x, y: p.y - 12, txt: 'オイカケ撃退 +' + CONFIG.SEEKER_BONUS, t: 1.6, col: '#ff5cf0', big: true });
-    sayLine('catch', 1.4, true);
-    spawnParticles(p.x, p.y, 36, '#ff5cf0');
-    rings.push({ x: p.x, y: p.y, t: 0.2, col: '#ff5cf0' });
-    Snd.split();
-  }
-}
-// SEEKER = オイカケ: 紫のしずく形スライム。大きな一つ目で自機をにらむ。ぷるぷる揺れる。しびれ中は半透明+目がぐるぐる
-function drawSeeker(k, faint, at) {   // at: 描く位置(省略時はセルの位置)
-  const p = at || surf.screenOf(k.c), q = at ? { x: p.x + 10, y: p.y } : surf.screenOf(player.c);
-  const sq = Math.sin(k.ph * 5) * 0.08, x = p.x, y = p.y + 2, R = 9;
-  ctx.globalAlpha = (faint ? 0.3 : 1) * (k.stun > 0 ? 0.5 : 1);
-  // しずく形の体(上がとがる)。横に少し伸び縮み
-  const body = new Path2D();
-  body.moveTo(x, y - R * 2.1);
-  body.bezierCurveTo(x + R * 0.6, y - R * 1.3, x + R * (1.15 + sq), y - R * 0.4, x + R * (1.05 + sq), y + R * 0.3);
-  body.bezierCurveTo(x + R * 0.9, y + R * 1.05, x - R * 0.9, y + R * 1.05, x - R * (1.05 + sq), y + R * 0.3);
-  body.bezierCurveTo(x - R * (1.15 + sq), y - R * 0.4, x - R * 0.6, y - R * 1.3, x, y - R * 2.1);
-  ctx.lineWidth = 3; ctx.strokeStyle = '#2a0d33'; ctx.stroke(body);
-  ctx.fillStyle = '#a64dff'; ctx.fill(body);
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.beginPath(); ctx.ellipse(x - 4, y - R * 0.9, 2, 3.2, -0.4, 0, Math.PI * 2); ctx.fill();
-  // 大きな一つ目
-  const a = Math.atan2(q.y - y, q.x - x), ox = Math.cos(a) * 2, oy = Math.sin(a) * 2;
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x, y - 1, 4.6, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#2a0d33'; ctx.lineWidth = 1.2; ctx.stroke();
-  if (k.stun > 0) {                       // しびれ: ぐるぐる目
-    ctx.beginPath(); ctx.arc(x, y - 1, 2.6, k.ph * 8, k.ph * 8 + 4.8); ctx.stroke();
-  } else {
-    ctx.fillStyle = '#2a0d33';
-    ctx.beginPath(); ctx.arc(x + ox, y - 1 + oy, 2.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(x + ox - 0.8, y - 1.8 + oy, 0.7, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-function drawSeekers() {
-  for (const k of seekers) {
-    if (surf.is3D && !visA[k.c]) { drawOffMarker(surf.screenOf(k.c), '#ff5cf0', 7); continue; }
-    drawSeeker(k, surf.is3D && surf.twoSided && !frontA[k.c]);
-  }
-}
-
 // 最初からある壁(外枠・HOME)と、平面の盤面を描き直す印
 let baseA = new Uint8Array(0), fieldDirty = false;
-// アイテム ZAP: バチッコを一掃・オイカケがしびれる
+// アイテム ZAP: バチッコを一掃
 function zapAll() {
   for (const sp of sparxes) { const q = surf.screenOf(sp.c); spawnParticles(q.x, q.y, 20, '#ff7a4a'); }
   sparxes = [];
   sparxTimer = Math.min(sparxTimer, CONFIG.SPARX_INTERVAL * diff().interval * 0.5);  // しばらくしたらまた出る
-  for (const k of seekers) k.stun = 4;
   shakeT = 0.25;
 }
 
@@ -3367,7 +3246,6 @@ const CLAWD_LINES = {
   clear:   ['やったー!', 'クリア!', '完璧!', '次いこう!', '塗りきった!'],
   idle:    ['…どこから攻めよう', 'ヌメリンの動きを見てる', 'じっくり考え中', '(ローラーを磨いている)', '作戦タイム', '……ねむい'],
   longline:['線が長くなってきた…', '早く戻らなきゃ', '欲張りすぎたかも', 'まだ行ける…?'],
-  fuse:    ['あっ! 火が!', '導火線!', '急げ急げ!', '止まっちゃだめだ!'],
   catch:   ['つかまえた!', 'いたずらはおしまい', '確保!'],
   shoo:    ['しっし!', 'あっちいって', '陣地をかじらないで!'],
   rescue:  ['よかったね!', 'もう迷子にならないで', 'おかえり!'],
@@ -3537,33 +3415,6 @@ function checkExtend() {
     nextExtend += CONFIG.EXTEND_EVERY;
     floats.push({ x: W / 2, y: H / 2, txt: 'EXTEND!', t: 1.6, col: '#8dff9e', big: true });
     Snd.extend();
-  }
-}
-
-/* ---------------- 導火線 ---------------- */
-function fuseReset() { fuse.wait = 0; fuse.pos = 0; fuse.lit = false; fuse.sndT = 0; fuse.said = false; }
-function effFuseDelay() { return CONFIG.FUSE_DELAY * diff().fuse; }
-function fuseMin() { return surf.is3D ? CONFIG.FUSE_MIN / 2 : CONFIG.FUSE_MIN; }
-// 火の出る場所が自機から十分離れているか(マス数と画面上の距離の両方)
-function fuseFar() {
-  if (trail.length < fuseMin()) return false;
-  const a = surf.screenOf(trail[0]), b = surf.screenOf(player.c);
-  return Math.hypot(a.x - b.x, a.y - b.y) >= CONFIG.FUSE_MIN_PX;
-}
-
-function updateFuse(dt, stepped) {
-  if (!player.drawing || trail.length === 0) return;
-  if (stepped) { fuse.wait = 0; return; } // 動いている間(方向キーを押している間)は進まない(点火状態は維持)
-  // 線が短い = 書き始め(火が出る場所)が自機のすぐそば。そこでは点火しない
-  if (!fuse.lit && !fuseFar()) { fuse.wait = 0; return; }
-  fuse.wait += dt;
-  if (fuse.wait >= effFuseDelay()) {
-    fuse.lit = true;
-    fuse.pos += CONFIG.FUSE_SPEED * surf.def.speed * dt;
-    fuse.sndT -= dt;
-    if (fuse.sndT <= 0) { Snd.fuseCr(); fuse.sndT = 0.07; }
-    if (!fuse.said) { fuse.said = true; sayLine('fuse', 1.2); }
-    if (fuse.pos >= trail.length) death('導火線の火に追いつかれた');
   }
 }
 
@@ -4313,7 +4164,6 @@ function rivalClose(r) {
   // 自機の描きかけの線が囲まれたら、自機がやられる
   if (player.drawing && trail.some(c => !visited[c])) death(r.name + 'に囲まれた');
   for (const q of rivals) if (q !== r && q.drawing && q.trail.some(c => !visited[c])) rivalFail(q, 'trap', r);
-  crushSeekers();
   r.drawing = false; r.trail = []; r.pts = []; r.plan = []; r.fast = false;
   // 陣地に埋もれたファイター(自分もほかの人も)は、すぐ近くの線の上へ(自機のミス演出で更新が止まっている間も埋もれたままにしない)
   for (const q of rivals) if (!q.drawing && q.dead <= 0 && !(q.overT > 0) && !isBoundary(q.c)) snapActor(q);
@@ -4813,7 +4663,6 @@ function cancelTrail() {
   for (const c of trail) grid[c] = OPEN;
   trail = [];
   player.drawing = false;
-  fuseReset();
   Snd.stopDraw();
   if (trailStart >= 0) { player.c = trailStart; player.prev = -1; }
   snapPlayerToBoundary();
@@ -4825,7 +4674,6 @@ function applyDeath() {
   for (const c of trail) grid[c] = OPEN; // 軌跡は消える
   trail = [];
   player.drawing = false;
-  fuseReset();
   if (trailStart >= 0) { player.c = trailStart; player.prev = -1; }
   snapPlayerToBoundary();
   if (lives < 0 && isStock()) { lives = 0; player.out = true; vsEnd(true); return; }   // 残機制: 脱落 = この試合は負け
@@ -5000,7 +4848,6 @@ function drawHelp(t) {
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 4, y - 1, 2.6, 0, Math.PI * 2); ctx.arc(x + 4, y - 1, 2.6, 0, Math.PI * 2); ctx.fill();
   }, 'ヌメリン', '空き地をただようクラゲ。触手が描きかけの線に触れるとミス');
   row(250, (x, y) => drawSparx(x, y, fake), 'バチッコ', '線の上を走る火の玉。触れるとミス');
-  row(294, (x, y) => drawSeeker({ c: 0, ph: blinkT, stun: 0 }, false, { x, y: y + 4 }), 'オイカケ', 'AREA 4〜。線を追ってくる一つ目スライム。囲めば倒せる');
   row(338, (x, y) => { ctx.fillStyle = '#ff9e3d'; ctx.fillRect(x - 2, y - 2, 5, 5); }, '導火線', '描く途中で止まると火がつき、線をさかのぼる');
   let y = 392;
   ctx.fillStyle = '#ffd76b'; ctx.font = "bold 14px 'Courier New', monospace";
@@ -5241,7 +5088,6 @@ function update(dt) {
 }
 // 自機が動いたあとの、敵・アイテム・時間などの更新(平面・立体共通)
 function updateWorld(dt, stepped) {
-  updateFuse(dt, stepped);
   if (deathTimer > 0) { updateParticles(dt); updateFloats(dt); return; }
 
   updateQixes(dt);
@@ -5249,7 +5095,6 @@ function updateWorld(dt, stepped) {
 
   updateSparxes(dt);
   if (deathTimer > 0) { updateParticles(dt); updateFloats(dt); return; }
-  updateSeekers(dt);
   if (deathTimer > 0) { updateParticles(dt); updateFloats(dt); return; }
   if (deathTimer > 0) { updateParticles(dt); updateFloats(dt); return; }
   if (hasRivals()) { updateRivals(dt); updateVoices(); updateBanter(dt); if (state !== 'play') { Snd.voiceStopAll(); for (const r of rivals) r.voice = false; return; } if (deathTimer > 0) { updateParticles(dt); updateFloats(dt); return; } }
@@ -5278,7 +5123,7 @@ function tickMeta(dt) {
     if (demoT > 8) { demoT = 0; demoLv++; initLevel(demoLv); say(surf.def.label + '!', 1.6, true); }
   } else demoT = 0;
   // 音の反応: 導火線やポーズでBGMがこもる、ピンチ(残機0)でも少しこもる
-  const cut = state === 'pause' ? 500 : (fuse.lit && player.drawing) ? 1100 : deathTimer > 0 ? 700
+  const cut = state === 'pause' ? 500 : deathTimer > 0 ? 700
             : (state === 'play' && lives === 0) ? 6000 : 18000;
   let pan = 0;
   if (surf && grid) { const p = surf.screenOf(player.c); pan = (p.x - W / 2) / (W / 2) * 0.7; }
@@ -5349,16 +5194,6 @@ function drawSparx(px, py, s) {
   ctx.beginPath(); ctx.moveTo(px - 5.5, py - 3.6); ctx.lineTo(px - 1.2, py - 2); ctx.moveTo(px + 5.5, py - 3.6); ctx.lineTo(px + 1.2, py - 2); ctx.stroke();
   ctx.globalAlpha = 1;
 }
-function drawFuse(p) {
-  // 導火線の火: 小さな炎(色は固定、ゆっくり揺れる)
-  const r = 4 + Math.sin(blinkT * 6) * 0.8;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ff7a2a';
-  ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffe07a';
-  ctx.beginPath(); ctx.arc(p.x, p.y - 1, r * 0.45, 0, Math.PI * 2); ctx.fill();
-}
 /* ---- 自機 Clawd(ドット絵) ----
    13×9 ドット。体・目・腕・4本脚。歩くと脚が交互に上がって体が弾み、
    線を引いている間は腕を振る。ときどきまばたき。o の中身:
@@ -5370,7 +5205,6 @@ const CLAWD_SKINS = [
   { name:'MINT',   col:'#5fd6b0', need:'first' },
   { name:'SKY',    col:'#6fb6ff', need:'combo' },
   { name:'PINK',   col:'#ff8fc8', need:'items' },
-  { name:'PURPLE', col:'#b58cff', need:'seeker' },
   { name:'GHOST',  col:'#e8ecff', need:'klein' },
   { name:'GOLD',   col:'#ffcc33', need:'all' },
   { name:'RAINBOW', col:null,     need:'tourall' },   // 色が虹のように変わり続ける
@@ -5473,12 +5307,6 @@ function drawPlayer(t) {
     ctx.textAlign = 'center';
     ctx.fillText('!', cx, cy - 7 * s);
   }
-  // 導火線に火がついたら冷や汗
-  if (fuse.lit && player.drawing && Math.floor(blinkT * 6) & 1) {
-    ctx.fillStyle = '#9fdcff';
-    ctx.fillRect(cx + 6 * s, cy - 6 * s, s, 2 * s);
-    ctx.fillRect(cx + 5.5 * s, cy - 4 * s, 2 * s, s);
-  }
 }
 
 // アイテム: 色の光る玉に記号。消える前は点滅
@@ -5531,7 +5359,6 @@ function calcDanger() {
     if (d < R) danger = Math.max(danger, 1 - d / R);
   };
   for (const sp of sparxes) if (!(sp.wait > 0)) near(sp.c, true);
-  if (player.drawing) for (const k of seekers) near(k.c, true);
   // 近いほど速いテンポでチリチリ鳴らす
   dangerSndT -= 1 / 60;
   if (danger > 0.35 && dangerSndT <= 0) { Snd.fuseCr(); dangerSndT = 0.35 - danger * 0.25; }
@@ -5614,7 +5441,6 @@ function drawBackView(t) {
   const cw = c => [P[c * 3], P[c * 3 + 1], P[c * 3 + 2]];
   for (const it of items) dot(cw(it.c), ITEMS[it.k].col, 3);
   for (const sp of sparxes) dot(cw(sp.c), '#ff5a28', 3);
-  for (const k of seekers) dot(cw(k.c), '#ff5cf0', 3.5);
   for (const r of rivals) if (r.dead <= 0) dot(cw(r.c), teamHex(r.team), 3);
   for (const q of qixes) dot(S.world(q.p || [q.x, q.y]), qixStroke(q.hue, 60, 1), 4.5);
   ctx.fillStyle = '#8fa3d9';
@@ -5635,7 +5461,7 @@ function render() {
   ctx.fillRect(-8, -8, W + 16, H + 16);
   if (surf.is3D) { drawAtmosphere(); render3D(t); }
   else render2D(t);
-  drawItems(); drawSeekers();
+  drawItems();
   if (rivals.length && !surf.is3D) drawRivals(t);
   if (rivals.length && surf.is3D) drawRivals3D(t);
   if ((rivals.length || souls.length)) drawSouls(false);
@@ -5724,8 +5550,6 @@ function render2D(t) {
   drawInkTrail(t);
 
   // 導火線
-  if (fuse.lit && player.drawing && trail.length)
-    drawFuse(surf.screenOf(trail[Math.min(Math.floor(fuse.pos), trail.length - 1)]));
 
   // SPARX
   for (const s of sparxes) { const p = surf.screenOf(s.c); drawSparx(p.x, p.y, s); }
@@ -6072,11 +5896,6 @@ function render3D(t) {
   }
 
   drawInkTrail(t);
-  // 導火線
-  if (fuse.lit && player.drawing && trail.length) {
-    const c = trail[Math.min(Math.floor(fuse.pos), trail.length - 1)];
-    if (visA[c]) drawFuse(S.screenOf(c));
-  }
   // SPARX(裏側にいるものは輪郭の外にマーカー)
   for (const s of sparxes) {
     const p = S.screenOf(s.c);
@@ -6271,7 +6090,6 @@ function renderOverlay() {
       ['囲んだマス', stats.cells.toLocaleString() + ' マス'],
       ['取ったアイテム', stats.items + ' 個'],
       ['ヌメリン分断', stats.splits + ' 回'],
-      ['倒したオイカケ', stats.seekers + ' 体'],
       ['ニアミス', (stats.nearMiss || 0) + ' 回'],
       ['TOUR最高到達', 'AREA ' + ((stats.maxArea || {}).TOUR || '-')],
       ['クリアした盤面', Object.keys(CONFIG.SURF).filter(k => bestPct[k] != null).length + ' / ' + Object.keys(CONFIG.SURF).length],
@@ -6412,10 +6230,6 @@ function renderOverlay() {
         ctx.fillStyle = '#ff9ee8';
         ctx.fillText('BONUS AREA ─ ' + CONFIG.BONUS_TIME + '秒で好きなだけ囲め! 敵はヌメリンだけ', W / 2, y);
         y += 24;
-      }
-      if (seekers.length) {
-        ctx.fillStyle = '#ff5cf0';
-        ctx.fillText('オイカケ出現 ─ 線を追ってくる。囲めば倒せる', W / 2, y);
       }
     }
     return;
