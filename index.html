@@ -238,7 +238,7 @@ const ITEMS = {
   slow:   { label:'SLOW',   mark:'S', col:'#7df9ff', w:3, txt:'敵がゆっくり' },
   shield: { label:'SHIELD', mark:'◆', col:'#8dff9e', w:3, txt:'1回だけミスを防ぐ' },
   star:   { label:'STAR',   mark:'★', col:'#ffd76b', w:3, txt:'得点2倍' },
-  life:   { label:'1UP',    mark:'♥', col:'#ff9ee8', w:1, txt:'残機+1' },
+  life:   { label:'1UP',    mark:'♥', col:'#ff9ee8', w:1, txt:'残機+1(残機制のときだけ出る)' },
   zap:    { label:'ZAP',    mark:'✦', col:'#ff7a4a', w:2, txt:'バチッコを一掃' },
   over:   { label:'上塗り', mark:'⟳', col:'#ffffff', w:5, txt:'しばらく陣地の上を走って相手の色を上塗り(混ざると中立)' },
 };
@@ -727,23 +727,30 @@ function hiOf(mode) { return hiScores[mode] | 0; }
 /* ---- 実績 ----
    達成すると画面上部に表示。OPTIONS の「実績を見る」で一覧 */
 const ACHV = [
-  { id:'first',    name:'はじめの一歩',   txt:'どこかのエリアをクリア' },
-  { id:'split',    name:'一刀両断',       txt:'ヌメリンを分断してクリア' },
-  { id:'nomiss',   name:'ノーミス',       txt:'1回もミスせずにエリアクリア' },
-  { id:'speed',    name:'スピードスター', txt:'60秒以内にエリアクリア' },
-  { id:'pct90',    name:'ほぼ全部',       txt:'占領率90%以上でクリア' },
-  { id:'slowonly', name:'じっくり派',     txt:'Zを使わずにエリアクリア' },
-  { id:'big30',    name:'大風呂敷',       txt:'一度に30%以上を囲む' },
+  { id:'first',    name:'はじめての勝利', txt:'ナワバリバトルで1位になる' },
+  { id:'win10',    name:'常勝',           txt:'10回勝つ' },
+  { id:'nomiss',   name:'無傷の勝利',     txt:'1回もやられずに勝つ' },
+  { id:'pct50',    name:'大ナワバリ',     txt:'自分の陣地50%以上で勝つ' },
+  { id:'round5',   name:'勝ち上がり',     txt:'ラウンド5に進む' },
+  { id:'round10',  name:'遠くまで来た',   txt:'ラウンド10に進む' },
+  { id:'cut',      name:'スキあり!',     txt:'相手の描きかけの線を切ってたおす' },
+  { id:'kill5',    name:'大暴れ',         txt:'1試合で5人たおす' },
+  { id:'over',     name:'上塗り名人',     txt:'上塗りで陣地を塗りかえる' },
+  { id:'big20',    name:'大風呂敷',       txt:'一度に盤面の20%以上を囲む' },
   { id:'combo',    name:'れんぞく技',     txt:'コンボ倍率を最大(×3)にする' },
+  { id:'wagara',   name:'和柄あつめ',     txt:'大きく囲んで和柄を6種ぜんぶ出す' },
   { id:'items',    name:'コレクター',     txt:'全種類のアイテムを取る' },
-  { id:'area10',   name:'遠くまで来た',   txt:'AREA 10 に到達' },
-  { id:'klein',    name:'裏も表もない',   txt:'クラインの壺をクリア' },
-  { id:'platonic', name:'プラトンの立体', txt:'正多面体5種をすべてクリア' },
-  { id:'stars',    name:'星をつかむ',     txt:'星型3種をすべてクリア' },
-  { id:'all',      name:'全制覇',         txt:'すべての盤面をクリア' },
+  { id:'stock',    name:'生き残り',       txt:'残機制で勝つ' },
+  { id:'crowd',    name:'7人抜き',        txt:'CPU 7人の試合で勝つ' },
+  { id:'devil',    name:'悪魔ばらい',     txt:'CPUの強さ「悪魔」で勝つ' },
+  { id:'klein',    name:'裏も表もない',   txt:'クラインの壺で勝つ' },
+  { id:'platonic', name:'プラトンの立体', txt:'正多面体5種すべてで勝つ' },
+  { id:'stars',    name:'星をつかむ',     txt:'星型3種すべてで勝つ' },
+  { id:'all',      name:'全ステージ制覇', txt:'すべてのステージで勝つ' },
   { id:'nearmiss', name:'ギリギリの達人', txt:'1ゲームでニアミスを5回' },
 ];
 const achvGot = store.get('qlaim.ach', {});
+const wagaraGot = store.get('qlaim.wagara', {});     // 自分で出した和柄の種類
 const itemsGot = store.get('qlaim.items', {});      // これまでに取ったアイテムの種類
 let achvToasts = [];                                  // 表示待ちの実績 { a, t }
 function unlock(id) {
@@ -757,7 +764,7 @@ function unlock(id) {
 const hasAll = keys => keys.every(k => bestPct[k] != null);
 
 /* ---- あそんだ記録(統計)。OPTIONS「あそんだ記録」で表示 ---- */
-const stats = Object.assign({ games:0, time:0, claims:0, cells:0, items:0, splits:0, seekers:0, clears:0, plays:{}, maxArea:{} },
+const stats = Object.assign({ games:0, time:0, claims:0, cells:0, items:0, matches:0, wins:0, kills:0, downs:0, maxRound:0, plays:{} },
                             store.get('qlaim.stats', {}));
 function saveStats() { store.set('qlaim.stats', stats); }
 function favSurface() {
@@ -2335,6 +2342,12 @@ function pickBigPat() {
   const ks = BIG_PATS.filter(k => k !== lastBigPat);
   return (lastBigPat = pick(ks));
 }
+// 自分で出した和柄を覚える(6種そろうと実績)
+function noteWagara(tp) {
+  if (!BIG_PATS.includes(tp)) return;
+  wagaraGot[tp] = 1; store.set('qlaim.wagara', wagaraGot);
+  if (BIG_PATS.every(k => wagaraGot[k])) unlock('wagara');
+}
 // 塗った陣地に柄をつける: コンボならコンボの柄、大きく囲んだら和柄。つけた柄の名前(なければ null)
 function claimPattern(cells, combo, origin) {
   const tp = cells.length > 20 && teamPat(combo) ? teamPat(combo) : isBigClaim(cells.length) ? pickBigPat() : null;
@@ -2584,8 +2597,7 @@ function initLevel(lv) {
   areaMiss = 0; areaFast = false;
   if (state !== 'title') {
     stats.plays[surf.key] = (stats.plays[surf.key] || 0) + 1;
-    stats.maxArea = stats.maxArea || {};
-    if (!(stats.maxArea[modeKey()] >= lv)) stats.maxArea[modeKey()] = lv;   // 最高到達エリア
+    if (!(stats.maxRound >= lv)) stats.maxRound = lv;   // 最高ラウンド
   }
   const s = surf.setup();
   setupRivals(lv);
@@ -2852,7 +2864,7 @@ function freeMove(a, v, dist, stepFn, stop) {
 function freeMovePlayer(dt) {
   if (player.overT > 0) {
     player.overT -= dt;
-    if (!player.drawing) overPaintAt(player, 1, 0);
+    if (!player.drawing && overPaintAt(player, 1, 0) > 0) unlock('over');
     if (player.overT <= 0 && !player.drawing && !isBoundary(player.c)) { snapPlayerToBoundary(); player.fx = null; }
   }
   const v = inputVec();
@@ -3020,6 +3032,7 @@ function closeTrail() {
   lastPat = pat;
   if (isVS()) {                                        // ナワバリバトル: コンボか大きく囲むと柄(色はチームのまま)
     const tp = claimPattern(newCells, combo, player.c);
+    noteWagara(tp);
     if (tp) { const P0 = playerScreen(); floats.push({ x: P0.x, y: P0.y - 40, txt: TEAM_PATS[tp], t: 1.4, col: teamHex(0) }); }
   }
   if (!inkRainbow() && !isVS()) {     // ナワバリバトルは、どっちの陣地か分かるよう無地
@@ -3046,7 +3059,7 @@ function closeTrail() {
     // 一度に大きく囲んだらボーナス
     const gp = gained / initOpen * 100;
     let bonus = 0;
-    if (gp >= 30) unlock('big30');
+    if (gp >= 20) unlock('big20');
     if (1 + combo * CONFIG.COMBO_STEP >= CONFIG.COMBO_MAX) unlock('combo');
     if (gp >= CONFIG.BIG_CLAIM) {
       bonus = Math.round(gp * CONFIG.BIG_CLAIM_PTS);
@@ -4056,7 +4069,7 @@ function snapActor(a) {
 function rivalFail(r, why, by) {
   if (r.dead > 0) return;
   r.downs++;
-  if (by) by.kills++; else if (isVS() && (why === 'cut' || why === 'trap')) vsStat.kills++;
+  if (by) by.kills++; else if (isVS() && (why === 'cut' || why === 'trap')) { vsStat.kills++; if (why === 'cut') unlock('cut'); if (vsStat.kills >= 5) unlock('kill5'); }
   const p = surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS };
   r.soul = { x: p.x, y: p.y, side: Math.random() < 0.5 ? -1 : 1 };     // 魂: やられた場所から昇っていく
   for (const c of r.trail) if (grid[c] === RTRAIL) grid[c] = OPEN;
@@ -4297,6 +4310,7 @@ function vsEnd(playerOut) {
   const me = playerArea(), best = Math.max(0, ...rivals.map(r => r.area));
   vsWin = !playerOut && (me > best || (isStock() && rivals.length && rivals.every(r => r.out)));   // 全員敵同士: 自分がいちばん広い(残機制は最後まで残っても)勝ち
   vsResult = { win: vsWin, rank: vsRanking().map(e => Object.assign({}, e)) };
+  stats.matches++; if (vsWin) stats.wins++; stats.kills += vsStat.kills; stats.downs += vsStat.downs; saveStats();
   if (vsWin) { startClear(false); artSaved = false; setState('vsres'); }        // 得点・記録は勝ちと同じ。画面は結果表
   else { Snd.stopDraw(); Bgm.stop(); Snd.over(); sealRemaining(); setState('vsres'); }
 }
@@ -4572,7 +4586,6 @@ function startClear(split) {
   saveHi();
   saveBest();
   checkClearAchv(split);
-  stats.clears++; if (split) stats.splits++;
   saveStats();
   Snd.stopDraw();
   const root = Bgm.root();
@@ -4673,8 +4686,9 @@ function drawHelp(t) {
     ctx.textAlign = 'center';
   };
   const fake = { c: 7, wait: 0, hist: [], ph: blinkT, stun: 0 };
-  row(162, (x, y) => drawClawd(x, y, 1.8, { moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'Clawd', 'あなた。空き地へ進むと線を引く(Zで速く)');
-  row(206, (x, y) => {
+  row(162, (x, y) => drawClawd(x, y, 1.8, { moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'Clawd', 'あなた(赤)。空き地へ進むと線を引く(Zで速く)');
+  row(206, (x, y) => drawClawd(x, y, 1.8, { col: teamHex(2), moving: true, walkF: Math.floor(blinkT * 8) & 1 }), 'CPU', '同じルールの相手。描きかけの線に入ればたおせる');
+  row(250, (x, y) => {
     ctx.fillStyle = qixStroke(200, 62, 1);
     ctx.beginPath(); ctx.ellipse(x, y, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = qixStroke(200, 62, 1); ctx.lineWidth = 3;
@@ -4682,9 +4696,8 @@ function drawHelp(t) {
     ctx.moveTo(x + 8, y + 6); ctx.quadraticCurveTo(x + 14, y + 12, x + 18, y + 10); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 4, y - 1, 2.6, 0, Math.PI * 2); ctx.arc(x + 4, y - 1, 2.6, 0, Math.PI * 2); ctx.fill();
   }, 'ヌメリン', '空き地をただようクラゲ。触手が描きかけの線に触れるとミス');
-  row(250, (x, y) => drawSparx(x, y, fake), 'バチッコ', '線の上を走る火の玉。触れるとミス');
-  row(338, (x, y) => { ctx.fillStyle = '#ff9e3d'; ctx.fillRect(x - 2, y - 2, 5, 5); }, '導火線', '描く途中で止まると火がつき、線をさかのぼる');
-  let y = 392;
+  row(294, (x, y) => drawSparx(x, y, fake), 'バチッコ', '線の上を走る火の玉。触れるとミス');
+  let y = 372;
   ctx.fillStyle = '#ffd76b'; ctx.font = "bold 14px 'Courier New', monospace";
   ctx.fillText('── アイテム(線で囲むと手に入る)──', W / 2, y - 12);
   for (const k of Object.keys(ITEMS)) {
@@ -4693,9 +4706,9 @@ function drawHelp(t) {
   }
   y += 50;
   ctx.fillStyle = '#cdd8ff'; ctx.font = "13px 'Courier New', monospace";
-  ['続けて囲むとコンボ。ヌメリン2体を線で分断すると即クリア',
-   'ヌメリンが描きかけの線をかすめると「ギリギリ!」ボーナス',
-   '5エリアごとに BONUS AREA。X を押す間は立体の全体が見える',
+  ['時間切れ(残機制は最後まで残る)で、いちばん広い人の勝ち',
+   '続けて囲むとコンボの柄、大きく囲むと和柄が出る',
+   '勝つと次のラウンド。X を押す間は立体の全体が見える',
    'ヌメリン・バチッコは 準備画面の「じゃま役」で出さないこともできる'].forEach((ln, i) => ctx.fillText(ln, W / 2, y + i * 22));
   ctx.fillStyle = '#6d7ba8'; ctx.font = "bold 12px 'Courier New', monospace";
   ctx.fillText('Z / X / タップ でもどる', W / 2, 762);
@@ -4703,11 +4716,12 @@ function drawHelp(t) {
 
 function checkClearAchv(split) {
   unlock('first');
-  if (split) unlock('split');
-  if (areaMiss === 0) unlock('nomiss');
-  if (areaTime < 60) unlock('speed');
-  if (percent() >= 90) unlock('pct90');
-  if (!areaFast) unlock('slowonly');
+  if (stats.wins >= 10) unlock('win10');
+  if (vsStat.downs === 0) unlock('nomiss');
+  if (initOpen && playerArea() / initOpen >= 0.5) unlock('pct50');
+  if (isStock()) unlock('stock');
+  if (rivals.length >= 7) unlock('crowd');
+  if (settings.cpuLv === '悪魔') unlock('devil');
   if (surf.key === 'KLEIN') unlock('klein');
   if (hasAll(['TETRA', 'CUBE', 'OCTA', 'DODECA', 'ICOSA'])) unlock('platonic');
   if (hasAll(['STELLA', 'SSD', 'GSD'])) unlock('stars');
@@ -4716,7 +4730,8 @@ function checkClearAchv(split) {
 
 function nextLevel() {
   level++;
-  if (level >= 10) unlock('area10');
+  if (level >= 5) unlock('round5');
+  if (level >= 10) unlock('round10');
   initLevel(level);
   setState('ready');
   greetArea();
@@ -4798,12 +4813,10 @@ const OPT_ITEMS = [
   { k:'music', label:'BGM',      vals:MUSIC_KEYS, str:true },
   { k:'claimSnd', label:'塗る音', vals:CLAIM_SND_OPTS, str:true },
   { k:'diff',  label:'難易度',   vals:DIFF_KEYS, str:true },
-  { k:'lives', label:'残機',     min:1, max:5 },
   { k:'theme', label:'テーマ',   vals:THEMES.map(t => t.name).concat(['AUTO']) },
   { k:'crt',   label:'CRT効果',  vals:['OFF','ON'], bool:true },
   { k:'glow',  label:'発光',     vals:['OFF','ON'], bool:true },
   { k:'shake', label:'揺れ・振動', vals:['OFF','ON'], bool:true },
-  { k:'ink',   label:'インク', vals:INK_OPTS, str:true },
   { k:'_match', label:'対戦の設定・キー' },
   { k:'_gallery', label:'ギャラリー' },
   { k:'_achv', label:'実績を見る' },
@@ -4894,7 +4907,7 @@ function update(dt) {
     return updateWorld(dt, mv || !!inputVec());
   }
   // 立体: マスごとに上下左右
-  if (player.overT > 0) { player.overT -= dt; if (!player.drawing) overPaintAt(player, 1, 0); if (player.overT <= 0 && !player.drawing && !isBoundary(player.c)) snapPlayerToBoundary(); }
+  if (player.overT > 0) { player.overT -= dt; if (!player.drawing && overPaintAt(player, 1, 0) > 0) unlock('over'); if (player.overT <= 0 && !player.drawing && !isBoundary(player.c)) snapPlayerToBoundary(); }
   const d = currentDir();
   const spd = (player.drawing
     ? (held.fast ? CONFIG.DRAW_FAST : CONFIG.DRAW_SLOW)
@@ -5893,18 +5906,17 @@ function renderOverlay() {
     const hm = Math.floor(stats.time / 3600) + '時間' + String(Math.floor(stats.time / 60) % 60).padStart(2, '0') + '分';
     const fav = favSurface();
     const rows = [
-      ['ゲーム回数', stats.games + ' 回'],
+      ['試合', stats.matches + ' 回'],
+      ['勝ち', stats.wins + ' 回' + (stats.matches ? '  (勝率 ' + Math.round(stats.wins / stats.matches * 100) + '%)' : '')],
+      ['たおした', stats.kills + ' 人'],
+      ['やられた', stats.downs + ' 回'],
+      ['最高ラウンド', stats.maxRound ? 'ラウンド ' + stats.maxRound : '─'],
       ['あそんだ時間', hm],
-      ['エリアクリア', stats.clears + ' 回'],
-      ['囲んだ回数', stats.claims + ' 回'],
       ['囲んだマス', stats.cells.toLocaleString() + ' マス'],
       ['取ったアイテム', stats.items + ' 個'],
-      ['ヌメリン分断', stats.splits + ' 回'],
-      ['ニアミス', (stats.nearMiss || 0) + ' 回'],
-      ['TOUR最高到達', 'AREA ' + ((stats.maxArea || {}).TOUR || '-')],
-      ['クリアした盤面', Object.keys(CONFIG.SURF).filter(k => bestPct[k] != null).length + ' / ' + Object.keys(CONFIG.SURF).length],
+      ['勝ったステージ', Object.keys(CONFIG.SURF).filter(k => bestPct[k] != null).length + ' / ' + Object.keys(CONFIG.SURF).length],
       ['実績', ACHV.filter(a => achvGot[a.id]).length + ' / ' + ACHV.length],
-      ['よく遊ぶ盤面', fav ? CONFIG.SURF[fav].label + ' (' + stats.plays[fav] + '回)' : '─'],
+      ['よく遊ぶステージ', fav ? CONFIG.SURF[fav].label + ' (' + stats.plays[fav] + '回)' : '─'],
     ];
     rows.forEach(([k, v], i) => {
       const y = 236 + i * 34;

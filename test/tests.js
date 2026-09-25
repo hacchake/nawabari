@@ -516,19 +516,31 @@ assert('スクリーンショットはtoBlobが無い環境では何もしない
 // ---- 43) 実績 ----
 {
   for (const k in achvGot) delete achvGot[k];
-  settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016);
-  areaTime = 30; claimed = Math.ceil(initOpen * 0.92); startClear(false);
-  assert('クリアで実績(初クリア・ノーミス・スピード・90%・Z不使用)',
-    ['first', 'nomiss', 'speed', 'pct90', 'slowonly'].every(id => achvGot[id]), Object.keys(achvGot).join(','));
+  settings.mode = 'VS'; settings.vsCpu = '7'; settings.stageSel = 'PLANE'; startGame(); setState('play');
+  const m0 = stats.matches, w0 = stats.wins;
+  { let a = 0; for (let i = 0; i < surf.N && a < initOpen * 0.55; i++) if (grid[i] === OPEN) { grid[i] = WALL; ownA[i] = 1; colA[i] = teamNo(0); a++; } claimed += a; recountAreas(); }
+  vsEnd();
+  assert('勝つと実績(はじめての勝利・無傷・50%・7人抜き)',
+    state === 'vsres' && vsWin && ['first', 'nomiss', 'pct50', 'crowd'].every(id => achvGot[id]) && !achvGot.stock && !achvGot.devil, Object.keys(achvGot).join(','));
+  assert('記録: 試合と勝ちが増える', stats.matches === m0 + 1 && stats.wins === w0 + 1);
+  settings.vsCpu = 'AUTO'; settings.stageSel = 'TOUR';
   assert('実績のお知らせが出る', achvToasts.length >= 1);
   for (let i = 0; i < 3000 && achvToasts.length; i++) updateFloats(1/30);
   assert('お知らせは時間で消える', achvToasts.length === 0);
   assert('同じ実績は二度出ない', unlock('first') === false);
   for (const k of Object.keys(ITEMS)) itemsGot[k] = 1;   // (ZAP 追加後も全種)
   startGame(); stTimer = 2; tickMeta(0.016); items = [{ c: 0, k: 'star', t: 0 }]; grid[0] = WALL; collectItems();
-  assert('アイテム4種で「コレクター」', !!achvGot.items);
+  assert('アイテム全種で「コレクター」', !!achvGot.items);
+  // たおす・ラウンド
+  startGame(); setState('play'); vsStat.kills = 4; rivalFail(rivals[0], 'cut');
+  assert('線を切ってたおすと「スキあり!」、5人で「大暴れ」', !!achvGot.cut && !!achvGot.kill5);
+  level = 4; nextLevel(); assert('ラウンド5で「勝ち上がり」', !!achvGot.round5 && !achvGot.round10);
+  // 和柄あつめ
+  for (const k of BIG_PATS) wagaraGot[k] = 1; delete wagaraGot.hamon;
+  noteWagara('asanoha'); assert('コンボの柄は和柄に数えない', !achvGot.wagara && !wagaraGot.asanoha);
+  noteWagara('hamon'); assert('和柄6種で「和柄あつめ」', !!achvGot.wagara);
   for (const k of ['TETRA', 'CUBE', 'OCTA', 'DODECA', 'ICOSA']) bestPct[k] = 80;
-  checkClearAchv(false);
+  startGame(); setState('play'); checkClearAchv(false);
   assert('正多面体5種で「プラトンの立体」', !!achvGot.platonic && !achvGot.all);
   setState('options'); optSel = OPT_ITEMS.findIndex(o => o.k === '_achv'); adjustOpt(1);
   assert('OPTIONSから実績一覧へ', state === 'achv');
@@ -738,13 +750,13 @@ assert('脈動はAC無しなら0', Bgm.pulse() === 0);
 }
 
 
-// ---- 64) TOURの最高到達エリア ----
+// ---- 64) 最高ラウンド ----
 {
-  settings.mode = 'TOUR'; startGame(); stTimer = 2; tickMeta(0.016);
-  for (let i = 0; i < 3; i++) { claimed = Math.ceil(initOpen * 0.8); startClear(false); nextLevel(); }
-  assert('TOURの最高到達エリアを記録', stats.maxArea.TOUR >= 4, stats.maxArea.TOUR);
-  let err = null; try { render(); backToTitle(); render(); } catch (e) { err = e.stack; }
-  assert('HUD・タイトル表示が例外なし', !err, err);
+  settings.mode = 'VS'; startGame(); stTimer = 2; tickMeta(0.016);
+  for (let i = 0; i < 3; i++) nextLevel();
+  assert('最高ラウンドを記録', stats.maxRound >= 4, stats.maxRound);
+  setState('stats'); let err = null; try { render(); backToTitle(); render(); } catch (e) { err = e.stack; }
+  assert('あそんだ記録・タイトル表示が例外なし', !err, err);
 }
 
 
