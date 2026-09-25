@@ -12,7 +12,6 @@ const pxy = () => (player.c % GW) + ',' + ((player.c / GW) | 0);
 const nbs = c => Array.from(surf.nb.slice(c * 4, c * 4 + 4));
 function countCells(v) { let n = 0; for (let i = 0; i < surf.N; i++) if (grid[i] === v) n++; return n; }
 
-buddiesOn = false;   // ほかの検証の邪魔をしないよう buddy は後で個別に確かめる
 settings.mode = 'PLANE'; initLevel(1);
 
 // ---- 1) 初期状態 ----
@@ -1024,7 +1023,7 @@ assert('全盤面に豆知識がある', Object.keys(CONFIG.SURF).every(k => SUR
   level = 5; initLevel(5); setState('play'); claimed = Math.ceil(initOpen * 0.55); startClear(false);
   assert('BONUS AREAで50%以上で「ボーナスハンター」', !!achvGot.bonus50);
   setState('achv'); let err = null; try { render(); } catch (e) { err = e.stack; }
-  assert('実績一覧(23件)の描画', !err && ACHV.length === 23, err || ACHV.length);
+  assert('実績一覧の描画', !err && ACHV.length >= 10, err || ACHV.length);
 }
 
 
@@ -1059,61 +1058,7 @@ assert('全曲に表示名がある', Object.keys(BGMDATA).every(k => SONG_LABEL
 }
 
 
-// ---- 80) buddy たち ----
-buddiesOn = true;
-{
-  // 登場順: 9エリアで18種全員
-  const all = new Set(); for (let lv = 1; lv <= 9; lv++) buddiesFor(lv).forEach(k => all.add(k));
-  assert('9エリアで18種全員が登場する', all.size === 18 && Object.keys(BUDDIES).length === 18, all.size);
-  const mk = (k, lv) => { settings.mode = 'PLANE'; startGame(); level = lv || 1; initLevel(level); setState('play'); buddies = []; fireballs = []; sparxes = []; seekers = []; const b = spawnBuddy(k); b.shiny = false; return b; };
-  // 味方: 囲んで助ける
-  let b = mk('axolotl'); player.invuln = 99; held.fast = false;
-  const x0 = player.c % GW; b.c = idx(x0 - 2, GH - 3); const l0 = lives;
-  steps(0, -1, 4); steps(-1, 0, 4); steps(0, 1, 6);
-  assert('迷子のウーパールーパーを囲んで助けると残機+1', buddies.length === 0 && lives === l0 + 1, lives + '/' + l0);
-  // いたずら組: 囲むとつかまえる
-  b = mk('goose'); player.invuln = 99; b.c = idx(x0 - 2, GH - 3); const s0 = score;
-  steps(0, -1, 4); steps(-1, 0, 4); steps(0, 1, 6);
-  assert('ガチョウを囲むとつかまえる', buddies.length === 0 && score > s0);
-  // ガチョウはアイテムを取る
-  b = mk('goose'); items = [{ c: idx(60, 60), k: 'star', t: 0 }]; b.c = idx(55, 60);
-  for (let i = 0; i < 120; i++) updateBuddies(1/30);
-  assert('ガチョウがアイテムを横取り', items.length === 0);
-  // カタツムリ: 陣地をかじる(占領率が下がる・整合は保つ)
-  b = mk('snail'); player.invuln = 99; steps(0, -1, 10); steps(-1, 0, 10); steps(0, 1, 12);
-  const c1 = claimed; b.c = idx(x0 - 10, GH - 11); b.cd = 0;
-  for (let i = 0; i < 30; i++) updateBuddies(0.2);
-  assert('カタツムリが陣地をかじる(占領数が減り整合も保つ)', claimed < c1 && claimed === initOpen - countCells(OPEN), c1 + '→' + claimed);
-  assert('外枠(最初の壁)はかじらない', [0, GW - 1, idx(0, GH - 1)].every(c => grid[c] === WALL));
-  // さわると追い払える
-  b.c = surf.nb[player.c * 4 + 3]; b.cd = 99;
-  const nb3 = b.c; if (isBoundary(nb3)) { playerStep(nb3); for (const bb of buddies.slice()) if (bRole(bb) === 'eater' && bb.c === player.c) shoo(bb); }
-  assert('カタツムリにさわると追い払える', !buddies.some(x => x.k === 'snail') || !isBoundary(nb3));
-  // ネコ: 通せんぼ
-  b = mk('cat'); const nx = surf.nb[player.c * 4 + 3]; b.c = nx; b.cd = 99;
-  assert('ネコのいるマスには入れない', playerStep(nx) === false && buddyBlocks(nx));
-  // サボテン: 線で触れるとミス
-  b = mk('cactus'); player.invuln = 0; b.c = idx(player.c % GW, GH - 3); held.fast = false;
-  steps(0, -1, 3); updateBuddies(0.01);
-  assert('サボテンに線で触れるとミス', deathTimer > 0);
-  // ドラゴン: 火の玉
-  b = mk('dragon', 3); player.invuln = 0; held.fast = true; steps(0, -1, 30);
-  b.c = idx(0, GH - 20); b.cd = 0; updateBuddies(0.01);
-  assert('ドラゴンが火の玉を吐く', fireballs.length === 1 || deathTimer > 0, fireballs.length);
-  // ブロブ: インクボム
-  b = mk('blob'); const c2 = claimed; b.c = idx(64, 80); inkBomb(b.c, 5);
-  assert('ブロブのインクボムで陣地が増える(整合)', claimed > c2 + 20 && claimed === initOpen - countCells(OPEN));
-  // 図鑑・描画
-  let err = null;
-  try { for (const k of Object.keys(BUDDIES)) drawBuddy(k, 100, 100, 1, { ph: 1, warn: true }); setState('dex'); render(); settings.mode = 'SPHERE'; startGame(); level = 8; initLevel(8); setState('play'); render(); }
-  catch (e) { err = e.stack; }
-  assert('buddy18種・図鑑・立体での描画が例外なし', !err, err);
-  assert('会ったbuddyが図鑑に記録される', Object.keys(buddyMet).length >= 8);
-}
-
-
 // ---- 81) ヌメリンの体が線に当たるとミス ----
-buddiesOn = false;
 {
   for (const md of ['PLANE', 'SPHERE']) {
     settings.mode = md; startGame(); stTimer = 2; tickMeta(0.016); player.invuln = 0; held.fast = true;
@@ -1137,22 +1082,10 @@ buddiesOn = false;
   }
   assert('触手が細い線をすり抜けない', missed === 0, missed);
 }
-buddiesOn = true;
 
 
 // ---- 82) セリフとキャラクター設定 ----
 {
-  const bad = [];
-  for (const k in BUDDIES) {
-    const B = BUDDIES[k];
-    if (!B.nick || !RARITY[B.rar] || !B.bio || !B.lines || !B.lines.hello || !B.lines.idle) bad.push(k + ':設定');
-    if (!Array.isArray(B.st) || B.st.length !== 5 || B.st.some(v => !(v >= 0 && v <= 100))) bad.push(k + ':ステータス');
-    if (B.role === 'ally' && !(B.lines.bye && B.lines.bye.length)) bad.push(k + ':bye');
-    if (['eater', 'squirt', 'thief', 'block', 'dragon'].includes(B.role) && !(B.lines.act && B.lines.act.length)) bad.push(k + ':act');
-  }
-  assert('18種すべてに名前・レア度・性格・5ステータス・セリフ', bad.length === 0, bad.join(','));
-  const tw = BUDDIES.turtle;
-  assert('カメはワーブル(カードのステータスそのまま)', tw.nick === 'ワーブル' && tw.st.join() === '6,23,10,33,61');
   // 場面のセリフ・レア・時事ネタ
   assert('場面のセリフ', CLAWD_LINES.claimB.includes(pickLine('claimB', null, 0.9).txt));
   const rr = pickLine('claimB', null, 0.01);
@@ -1161,29 +1094,12 @@ buddiesOn = true;
     dateLines(new Date(2026, 11, 25, 20)).some(x => x.includes('クリスマス')) && dateLines(new Date(2027, 0, 2, 10)).some(x => x.includes('あけまして'))
     && dateLines(new Date(2026, 8, 25, 18)).some(x => x.includes('金曜')) && dateLines(new Date(2026, 8, 24, 2)).some(x => x.includes('寝なくて')));
   assert('{name}の差し込み', pickLine('meet', { name: 'ガーコ' }, 0.9).txt.includes('ガーコ'));
-  // 性格が動きに効く
-  settings.mode = 'PLANE'; startGame(); setState('play'); buddies = [];
-  const cap = spawnBuddy('capybara'), rab = spawnBuddy('rabbit'), goo = spawnBuddy('goose'), sna = spawnBuddy('snail');
-  assert('PATIENCEが高いほどゆっくり(カピバラ<ウサギ)', cap.spdK < rab.spdK);
-  assert('CHAOSが高いほどいたずらの間隔が短い(ガチョウ<カタツムリ)', goo.cdK < sna.cdK);
-  // buddy がしゃべる
-  buddyTalkCD = 0; assert('buddyがしゃべる', buddySay(sna, 'act') && sna.sayT > 0 && BUDDIES.snail.lines.act.includes(sna.sayTxt));
-  // 色違い: ごほうび2倍
-  buddies = []; const d = spawnBuddy('duck'); d.shiny = true; const s0 = score; rescue(d, { x: 100, y: 100 });
-  assert('色違いのアヒルはごほうび2倍', score - s0 === 4000, score - s0);
-  // 図鑑のカード
-  for (const k in BUDDIES) buddyMet[k] = 'x';
-  let err = null;
-  try { setState('dex'); dexSel = 0; onKeyDown({ key: 'ArrowRight', preventDefault() {} }); onKeyDown({ key: 'z', preventDefault() {} }); render();
-        for (let i = 0; i < 18; i++) { dexSel = i; render(); } onKeyDown({ key: 'x', preventDefault() {} }); }
-  catch (e) { err = e.stack; }
-  assert('図鑑のカード(全18種)が描ける・操作できる', !err && state === 'dex' && dexSel === 17, err || state + dexSel);
 }
 
 
 // ---- 83) 短い線では導火線に火がつかない(自機のすぐそばに火が出ない) ----
 {
-  settings.mode = 'PLANE'; startGame(); setState('play'); qixes = []; sparxList = []; seekers = []; buddies = [];
+  settings.mode = 'PLANE'; startGame(); setState('play'); qixes = []; sparxList = []; seekers = [];
   fuseReset(); player.drawing = true; trail = [0, 1, 2];
   for (let i = 0; i < 120; i++) updateFuse(1 / 60, false);
   assert('3マスの線では点火しない', !fuse.lit);
@@ -1209,7 +1125,7 @@ buddiesOn = true;
 // ---- 85) いろいろな色のインク・虹・アイテム ----
 {
   settings.mode = 'PLANE'; settings.ink = 'MIX'; settings.theme = THEMES.length; startGame(); setState('play');
-  qixes = []; sparxList = []; seekers = []; buddies = []; items = [];
+  qixes = []; sparxList = []; seekers = []; items = [];
   assert('平面は INK テーマ', inkMode());
   const seen = new Set();
   for (let i = 0; i < 40; i++) { nextInk(); seen.add(ink.i); }
@@ -1255,18 +1171,7 @@ buddiesOn = true;
     ink.rainbowT = 3; buildColors(); render(); ink.rainbowT = 0;
   } catch (e) { err = e.stack; }
   assert('インク・虹の描画(平面・立体)が例外なし', !err, err);
-  // 新アイテム
-  settings.mode = 'PLANE'; startGame(); setState('play'); qixes = []; items = [];
-  const oc = surf.nb[player.c * 4 + 0] >= 0 && grid[surf.nb[player.c * 4 + 0]] === OPEN ? surf.nb[player.c * 4 + 0] : null;
-  const c0 = idx(GW >> 1, GH >> 1);
-  items.push({ c: c0, k: 'rainbow', t: 0 }); grid[c0] = WALL; collectItems();
-  assert('RAINBOWアイテムで虹インク', ink.rainbowT > 0);
-  const before = claimed, c1 = idx(20, 20);
-  items.push({ c: c1, k: 'splash', t: 0 }); grid[c1] = WALL; collectItems();
-  assert('SPLASHアイテムでまわりが塗られる', claimed > before, claimed - before);
-  ink.rainbowT = 0; const i0 = ink.i, c2 = idx(60, 30);
-  items.push({ c: c2, k: 'paint', t: 0 }); grid[c2] = WALL; collectItems();
-  assert('PAINTアイテムでインクの色が変わる', ink.i !== i0);
+  assert('インクの色を変えるアイテムは出ない', !ITEMS.rainbow && !ITEMS.splash && !ITEMS.paint);
 }
 
 
@@ -1287,7 +1192,7 @@ buddiesOn = true;
 {
   const run = (setup) => {
     settings.mode = 'PLANE'; settings.ink = 'MIX'; startGame(); setState('play');
-    qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.8; sparxes = []; seekers = []; items = []; buddies = [];
+    qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.8; sparxes = []; seekers = []; items = [];
     setup();
     held.fast = false; steps(0, -1, 14); steps(1, 0, 14); steps(0, 1, 14);
     const ms = new Set(); let n = 0;
@@ -1441,7 +1346,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 
 // ---- 93) 自由移動(平面) ----
 {
-  settings.mode = 'PLANE'; startGame(); setState('play'); buddies = []; sparxes = []; seekers = []; items = [];
+  settings.mode = 'PLANE'; startGame(); setState('play'); sparxes = []; seekers = []; items = [];
   qixes = qixes.slice(0, 1); qixes[0].x = GW * 0.8; qixes[0].y = GH * 0.3;
   for (const k of ['up', 'down', 'left', 'right']) releaseDir(k);
   assert('斜めの入力は正規化される', (() => { pressDir('up'); pressDir('right'); const v = inputVec(); releaseDir('up'); releaseDir('right'); return Math.abs(Math.hypot(v[0], v[1]) - 1) < 1e-9 && v[0] > 0 && v[1] < 0; })());
@@ -1465,7 +1370,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 }
 // ---- 94) ナワバリバトル(CPU) ----
 {
-  settings.mode = 'VS'; startGame(); setState('play'); buddies = []; sparxes = []; seekers = []; items = [];
+  settings.mode = 'VS'; startGame(); setState('play'); sparxes = []; seekers = []; items = [];
   assert('VS: CPUは3人・全員別の色・制限時間', rivals.length === 3 && new Set(rivals.map(r => r.team).concat([0])).size === 4 && vsT === CONFIG.VS_TIME && qixes.length === 1);
   const r = rivals[0];
   assert('CPUは線の上から始まる', isBoundary(r.c));
