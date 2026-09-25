@@ -1544,5 +1544,25 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   settings.stageSel = 'TOUR'; shakeT = 0;
 }
 
+// ---- 112) ナワバリバトルは、一度に塗れるのは狭いほうだけ ----
+{
+  for (const sk of ['PLANE', 'CUBE', 'TORUS']) {
+    settings.mode = 'VS'; settings.numerin = 'ON'; settings.stageSel = sk; startGame(); setState('play');
+    const q = qixes[0], qc = surf.qixCell(q), d = bfsDist([qc]);
+    // ヌメリンのまわりに小さな囲いを作る(半径4の輪を線に)
+    for (let i = 0; i < surf.N; i++) if (d[i] === 4 && grid[i] === OPEN) { grid[i] = WALL; colA[i] = 0; }
+    const kv = visitedFrom(keepCell());
+    assert(sk + ': 残すのは広い空き地(ヌメリンのいる小さな囲いではない)', !kv[qc] && kv.reduce((a, v) => a + v, 0) > 100);
+    // 狭いほう(ヌメリンのいる囲い)を塗る
+    let n = 0; for (let i = 0; i < surf.N; i++) if (grid[i] === OPEN && !kv[i]) { grid[i] = WALL; colA[i] = teamNo(0); ownA[i] = 1; n++; }
+    rescueQixes();
+    const nc = surf.qixCell(q);
+    assert(sk + ': 閉じこめられたヌメリンは広い空き地へ移る', n > 0 && nc >= 0 && grid[nc] === OPEN && visitedFrom(keepCell())[nc] === 1, 'n=' + n + ' c=' + nc);
+    let err = null; try { for (let i = 0; i < 60; i++) updateQixes(1 / 60); render(); } catch (e) { err = e.stack; }
+    assert(sk + ': 移ったあともヌメリンは空き地を動く', !err && grid[surf.qixCell(q)] === OPEN, err);
+  }
+  settings.stageSel = 'TOUR';
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);

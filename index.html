@@ -2723,9 +2723,10 @@ function sealRemaining() {
       if (grid[idx(x, y)] === OPEN) fctx.fillRect(x * CS, y * CS, CS, CS);
 }
 
-// 囲んだときに「塗らずに残す側」の空き地のマス: ヌメリンがいればヌメリンのいる側、いなければいちばん広い空き地(= 狭いほうを塗る)
+// 囲んだときに「塗らずに残す側」の空き地のマス: いちばん広い空き地(= 狭いほうを塗る)。
+// ナワバリバトルはいつもこれ(ヌメリンを閉じこめても、一度に塗れるのは狭いほうだけ)。ひとり用はヌメリンのいる側を残す
 function keepCell() {
-  if (qixes.length) return openNear(surf.qixCell(qixes[0]));
+  if (qixes.length && !isVS()) return openNear(surf.qixCell(qixes[0]));
   const N = surf.N, nb = surf.nb, seen = new Uint8Array(N), q = new Int32Array(N);
   let best = -1, bestN = 0;
   for (let s0 = 0; s0 < N; s0++) {
@@ -2735,6 +2736,38 @@ function keepCell() {
     if (t > bestN) { bestN = t; best = s0; }
   }
   return best;
+}
+// 塗られた側に閉じこめられたヌメリンは、残った広い空き地のいちばん奥へ移る
+function rescueQixes() {
+  if (!qixes.length) return;
+  let deep = -1;
+  for (const q of qixes) {
+    const c = surf.qixCell(q);
+    if (c >= 0 && grid[c] === OPEN && visitedFrom(keepCell())[c]) continue;
+    if (deep < 0) {
+      const keep = visitedFrom(keepCell()), walls = [];
+      for (let i = 0; i < surf.N; i++) if (!keep[i]) walls.push(i);
+      if (walls.length === surf.N) return;                // 空き地がない(試合の終わり)
+      const d = bfsDist(walls);
+      deep = -1; let best = -1;
+      for (let i = 0; i < surf.N; i++) if (keep[i] && d[i] > best) { best = d[i]; deep = i; }
+      if (deep < 0) return;
+    }
+    qixPlaceAt(q, deep);
+    const p = surf.screenOf(deep);
+    rings.push({ x: p.x, y: p.y, t: 0, col: qixStroke(q.hue, 62, 1) });
+    floats.push({ x: p.x, y: p.y - 20, txt: 'ヌメリン にげた!', t: 1.4, col: '#9fe3ff' });
+  }
+}
+// ヌメリンをマス c に移す(盤面の種類ごとの位置の持ち方に合わせる)
+function qixPlaceAt(q, c) {
+  if (q.p) {                                             // 多面体・球: 方向ベクトル p と接ベクトル h
+    q.p = vnorm([surf.dir[c * 3], surf.dir[c * 3 + 1], surf.dir[c * 3 + 2]]);
+    const t = Math.abs(q.p[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    q.h = vnorm(vcross(q.p, t));
+  } else if (surf.NU) { q.x = (c % surf.NU) + 0.5; q.y = ((c / surf.NU) | 0) + 0.5; }   // 曲面
+  else { q.x = (c % GW) + 0.5; q.y = ((c / GW) | 0) + 0.5; }                            // 平面
+  q.segs = []; q.segT = 0; q.dash = 0;
 }
 // ナワバリバトルの邪魔役: 対戦の設定で ON / OFF(タイトルの背景にはいつも出す)
 function numerinOn() { return !hasRivals() || state === 'title' || settings.numerin !== 'OFF'; }
@@ -3044,7 +3077,7 @@ function closeTrail() {
 
   const gained = claimFill(palNo) + trail.length;
   claimed += gained;
-  if (hasRivals()) { trapRivals(); recountAreas(); }
+  if (hasRivals()) { trapRivals(); recountAreas(); rescueQixes(); }
   // 模様: 塗ったときの状況(時間・面積・アイテム・コンボ)で決まる
   const pat = pickPattern({ drawTime: blinkT - (player.drawT || blinkT), pct: gained / initOpen * 100 });
   lastPat = pat;
@@ -4056,6 +4089,7 @@ function rivalClose(r) {
   // 囲んだアイテム: 上塗りはそのファイターのもの。ほかは消える
   for (const it of items.filter(it => grid[it.c] !== OPEN)) { items.splice(items.indexOf(it), 1); if (it.k === 'over') fighterOver(r, it); }
   claimed += gained; recountAreas();
+  rescueQixes();
   // 自機の描きかけの線が囲まれたら、自機がやられる
   if (player.drawing && trail.some(c => !visited[c])) death(r.name + 'に囲まれた');
   for (const q of rivals) if (q !== r && q.drawing && q.trail.some(c => !visited[c])) rivalFail(q, 'trap', r);
