@@ -1436,5 +1436,72 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   let err = null; try { setState('play'); render(); } catch (e) { err = e.stack; } assert('時間制のHUD', !err, err);
 }
 
+// ---- 107) 決着前の10秒で BGM が盛り上がる ----
+{
+  settings.mode = 'VS'; settings.vsRule = 'TIME'; startGame(); setState('play'); player.invuln = 99;
+  Bgm.climax = false; vsT = 12;
+  for (let i = 0; i < 60 * 1.5 && state === 'play'; i++) update(1 / 60);
+  assert('残り12秒ではまだ', !Bgm.climax);
+  for (let i = 0; i < 60 * 1.5 && state === 'play'; i++) update(1 / 60);
+  assert('残り10秒で盛り上げ・「ラスト10秒!」', Bgm.climax && floats.some(f => f.txt === 'ラスト10秒!'));
+  for (let i = 0; i < 60 * 12 && state === 'play'; i++) update(1 / 60);
+  assert('時間切れで盛り上げを止める', state === 'vsres' && !Bgm.climax);
+  settings.vsRule = 'STOCK'; startGame(); setState('play'); player.invuln = 99; Bgm.climax = false;
+  for (let i = 0; i < 60; i++) update(1 / 60);
+  assert('残機制は時間がないので盛り上げない', !Bgm.climax);
+  settings.vsRule = 'TIME';
+}
+
+
+// ---- 108) 逆転の知らせ・バーがすべって動く ----
+{
+  settings.mode = 'VS'; settings.vsCpu = '3'; settings.stageSel = 'PLANE'; startGame(); setState('play'); player.invuln = 99;
+  const give = (own, n) => { let b = 0; for (let i = 0; i < surf.N && b < n; i++) if (grid[i] === OPEN) { grid[i] = WALL; ownA[i] = own; b++; } claimed += b; recountAreas(); };
+  give(2 + rivals[0].id, 300); checkLeader(0.1);
+  assert('最初の1位は知らせない', vsLeader === rivals[0].name && !floats.some(f => /逆転/.test(f.txt)));
+  give(1, 600); leadCD = 0; checkLeader(0.1);
+  assert('自分が1位になると「逆転!」', vsLeader === 'me' && floats.some(f => f.txt === '逆転! トップに立った!'));
+  give(2 + rivals[1].id, 1200); checkLeader(0.1);
+  assert('すぐ次の入れ替わりは知らせない(2.5秒あける)', vsLeader === rivals[1].name && !floats.some(f => f.txt === rivals[1].name + 'が逆転!'));
+  leadCD = 0; give(2 + rivals[2].id, 2400); checkLeader(0.1);
+  assert('CPUが1位になると「○○が逆転!」', floats.some(f => f.txt === rivals[2].name + 'が逆転!'));
+  // バーの区切りは少しずつ動く
+  hudAnim = {}; hudAnimT = blinkT; render();
+  const x0 = hudAnim.me.x; give(1, 5000); blinkT += 0.05; render();
+  const x1 = hudAnim.me.x; blinkT += 2; render(); const x2 = hudAnim.me.x;
+  assert('順位が変わるとバーの区切りはゆっくりすべる', x1 !== x0 && Math.abs(x1 - x0) < Math.abs(x2 - x0), x0.toFixed(1) + ' → ' + x1.toFixed(1) + ' → ' + x2.toFixed(1));
+  settings.vsCpu = 'AUTO'; settings.stageSel = 'TOUR';
+}
+
+
+// ---- 109) タイムラプス ----
+{
+  for (const sk of ['PLANE', 'CUBE']) {
+    settings.mode = 'VS'; settings.stageSel = sk; startGame(); setState('play'); player.invuln = 99;
+    for (let i = 0; i < 60 * 20 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); }
+    vsEnd();
+    const fin = { g: grid.slice(), a: colA.slice() };
+    assert(sk + ': 試合中の盤面の変化を記録', lapse.frames.length >= 5, lapse.frames.length);
+    stTimer = 2;
+    onKeyDown({ key: 't', preventDefault() {} });
+    assert(sk + ': T でタイムラプスを再生(はじめの盤面から)', !!lapsePlay && countCells(WALL) < fin.g.filter(v => v === WALL).length);
+    let err = null;
+    try { for (let i = 0; i < 60 * 3; i++) { blinkT += 1 / 60; tickMeta(1 / 60); if (i % 20 === 0) render(); } } catch (e) { err = e.stack; }
+    assert(sk + ': 再生中の描画', !err && !!lapsePlay, err);
+    for (let i = 0; i < 60 * 6 && lapsePlay; i++) tickMeta(1 / 60);
+    assert(sk + ': 最後まで見ると試合の終わりの盤面にもどる', !lapsePlay && grid.every((v, i) => v === fin.g[i]) && colA.every((v, i) => v === fin.a[i]) && state === 'vsres');
+    startLapse(); onKeyDown({ key: 'z', preventDefault() {} });
+    assert(sk + ': キーでとめても盤面はもどる(次へは進まない)', !lapsePlay && state === 'vsres' && grid.every((v, i) => v === fin.g[i]));
+  }
+  // ギャラリー: 勝った試合の作品にタイムラプスがつく(シムでは画像が作れないので、撮れた体で)
+  gallery = [{ img: 'data:image/jpeg;base64,AA', s: 'PLANE', p: 50, d: '20260925', sc: 1, mid: lapse.id }];
+  startLapse(); lapsePlay.caps = ['data:image/jpeg;base64,A1', 'data:image/jpeg;base64,A2', 'data:image/jpeg;base64,A3'];
+  for (let i = 0; i < 60 * 8 && lapsePlay; i++) tickMeta(1 / 60);
+  assert('勝った試合の作品にタイムラプスがつく', Array.isArray(gallery[0].lapse) && gallery[0].lapse.length >= 3);
+  let err = null; try { openGallery('title'); galleryBig = true; render(); galleryBig = false; render(); } catch (e) { err = e.stack; }
+  assert('ギャラリーでタイムラプスつきの作品を描く', !err, err);
+  settings.stageSel = 'TOUR'; gallery = []; setState('title');
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);

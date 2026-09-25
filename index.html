@@ -163,6 +163,7 @@ const CONFIG = {
   EXTEND_FIRST: 20000,  // 最初の1UPスコア
   EXTEND_EVERY: 50000,  // 以降の1UP間隔
   INVULN: 2.0,          // 復活後の無敵時間(秒)
+  CLIMAX_TIME: 10,      // ナワバリバトル: 残りこの秒数で BGM が盛り上がる
   SPLIT_BONUS: 8000,    // QIX分断ボーナス(基本)
   SPLIT_BONUS_LV: 2000, // 分断ボーナスのエリア加算
   BIG_CLAIM: 10,        // 一度にこの%以上囲むと BIG CLAIM ボーナス
@@ -1285,6 +1286,9 @@ const Snd = (() => {
     fuseCr() { noise(0.03, 0.07); },
     ready()  { tone(440, 0, 0.10, 'square', 0.11); tone(660, 0, 0.14, 'square', 0.11, 0.18); },
     blip()   { tone(880, 0, 0.05, 'square', 0.07); },
+    tick(hi) { tone(hi ? 1760 : 1320, 0, 0.03, 'triangle', 0.05); },
+    // 逆転: 自分がトップなら上がる2音、相手なら下がる2音
+    lead(me) { if (me) { tone(660, 0, 0.09, 'square', 0.06); tone(990, 0, 0.16, 'square', 0.06, 0.09); } else { tone(740, 0, 0.09, 'triangle', 0.07); tone(494, 0, 0.18, 'triangle', 0.07, 0.09); } },
     select() { tone(660, 990, 0.09, 'square', 0.10); },
   };
 })();
@@ -1295,6 +1299,9 @@ const Bgm = (() => {
   let step = 0, nextT = 0, timer = null;
   let formIdx = 0, formRep = 0;          // いまのセクション / その中で何回目か
   const kickTimes = [];                  // キックを鳴らす予定の時刻(画面の脈動用)
+  // クライマックス(決着前の10秒): 小節の頭で全音上に転調(Am → Bm)・テンポ1割増し・全パート
+  let climaxWant = false, climaxOn = false;
+  const CLIMAX_UP = Math.pow(2, 2 / 12), CLIMAX_BPM = 1.1;
   const NOSEC = { n: 1 };
   function section() { return song && song.form ? song.form[formIdx] : NOSEC; }
   // 1周(len ステップ)終わるごとに呼ぶ: 回数を満たしたら次のセクションへ
@@ -1314,13 +1321,13 @@ const Bgm = (() => {
     if (p >= 62 || lives <= 1) i = 3;
     return i;
   }
-  function bpmNow(inten) { return song.bpm * (inten >= 3 ? 1.07 : 1); }
+  function bpmNow(inten) { return song.bpm * (climaxOn ? CLIMAX_BPM : inten >= 3 ? 1.07 : 1); }
 
   let rootHz = 0;                        // いま鳴っているベース音(効果音をハモらせる)
   function scheduleStep(st, t, inten, stepDur) {
     const sec = section();
-    inten = clamp(inten + (sec.boost || 0), 0, 3);
-    const tp = Math.pow(2, (sec.t || 0) / 12);
+    inten = climaxOn ? 3 : clamp(inten + (sec.boost || 0), 0, 3);
+    const tp = Math.pow(2, (sec.t || 0) / 12) * (climaxOn ? CLIMAX_UP : 1);
     const vary = formRep > 0 ? 0.07 : 0;                      // 繰り返し中はメロディが少し揺らぐ
     for (let i = 0; i < song.tracks.length; i++) {
       const tr = song.tracks[i];
@@ -1370,6 +1377,7 @@ const Bgm = (() => {
     if (!Snd.ac || !song) return;
     const ahead = Snd.ac.currentTime + 0.18;
     while (nextT < ahead) {
+      if (step % 16 === 0) climaxOn = climaxWant;      // 転調は小節の頭で
       const inten = intensity();
       const sd = 60 / bpmNow(inten) / 4; // 16分音符の長さ
       // スウィング: 裏の16分を少し後ろへ
@@ -1393,7 +1401,7 @@ const Bgm = (() => {
         if (tr.p && !tr.set) tr.set = new Set(tr.p);
         if (tr.p2 && !tr.set2) tr.set2 = new Set(tr.p2);
       }
-      step = 0; formIdx = 0; formRep = 0; rootHz = 0;
+      step = 0; formIdx = 0; formRep = 0; rootHz = 0; climaxWant = climaxOn = false;
       Snd.setTempo(song.bpm);
       nextT = Snd.ac.currentTime + 0.08;
       startTimer();
@@ -1422,6 +1430,10 @@ const Bgm = (() => {
     _load(n) { song = BGMDATA[n]; name = n; formIdx = 0; formRep = 0; },
     _advance() { advance(); },
     get want() { return want; },
+    // 決着前の盛り上げ(true にすると次の小節から)
+    get climax() { return climaxWant; },
+    set climax(v) { climaxWant = !!v; if (!v) climaxOn = false; },
+    get climaxOn() { return climaxOn; },
   };
 })();
 
@@ -2635,6 +2647,7 @@ function initLevel(lv) {
   recountAreas();
 
   particles = []; floats = [];
+  if (isVS()) lapseReset();                         // タイムラプスの最初の盤面
   deathTimer = 0; wasSplit = false; shakeT = 0;
   if (autoTheme) applyTheme();   // AUTO: 盤面が変わったら配色(と背景)も
   redrawField();
@@ -3531,6 +3544,7 @@ function updateRival3D(r, dt) {
 function fighterScreen(r) { return surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS }; }
 // 立体のファイターの描画: 線(見えているところ)と Clawd
 function drawRivals3D(t) {
+  if (lapsePlay) return;                               // タイムラプス中はキャラを出さない(盤面だけ見せる)
   for (const r of rivals) {
     if (r.drawing && r.trail.length) {
       const path = new Path2D(); let pen = false, prev = null;
@@ -3591,6 +3605,7 @@ function drawSoul(x, y, col, a, up) {
   ctx.globalAlpha = 1;
 }
 function drawSouls(inPane) {
+  if (lapsePlay) return;                               // タイムラプス中はキャラを出さない(盤面だけ見せる)
   for (const r of rivals) {
     if (r.dead <= 0) continue;
     const q = soulPos(r);
@@ -3939,7 +3954,7 @@ function perimeterSplit(n) {
 function setupRivals(lv) {
   pendingEnds = [];
   if (isStock() && state !== 'title') { lives = vsStock() - 1; player.out = false; }   // 残機制: 画面の♥は「あと何回」なので -1
-  vsStat = { kills: 0, downs: 0 }; banterT = rand(5, 9); banterQ = [];
+  vsStat = { kills: 0, downs: 0 }; banterT = rand(5, 9); banterQ = []; vsLeader = null; leadCD = 0; hudAnim = {};
   ownA = new Uint8Array(surf.N); neutralAt = new Float32Array(surf.N).fill(-99); rtOwn = new Uint8Array(surf.N);
   Snd.voiceStopAll();
   rivals = [];
@@ -4305,8 +4320,10 @@ function qixHitsRival(q) {
 function vsEnd(playerOut) {
   if (state !== 'play') return;
   Snd.voiceStopAll();
+  Bgm.climax = false;
   cancelTrail();
   for (const r of rivals) { for (const c of r.trail) if (grid[c] === RTRAIL) grid[c] = OPEN; r.drawing = false; r.trail = []; r.pts = []; }
+  lapseRecord(0, true);                                // タイムラプスの最後の盤面
   const me = playerArea(), best = Math.max(0, ...rivals.map(r => r.area));
   vsWin = !playerOut && (me > best || (isStock() && rivals.length && rivals.every(r => r.out)));   // 全員敵同士: 自分がいちばん広い(残機制は最後まで残っても)勝ち
   vsResult = { win: vsWin, rank: vsRanking().map(e => Object.assign({}, e)) };
@@ -4322,6 +4339,7 @@ function vsRetry() {
   initLevel(level); setState('ready'); Bgm.play(bgmName()); Snd.ready();
 }
 function drawRivals(t) {
+  if (lapsePlay) return;                               // タイムラプス中はキャラを出さない(盤面だけ見せる)
   for (const r of rivals) {
     if (r.drawing && r.pts.length) {
       const path = new Path2D(), pp = r.pts.concat([[r.fx, r.fy]]);
@@ -4412,15 +4430,54 @@ function drawVsRes(t) {
   const end = drawResultTable(r.rank, 170, r.win ? 'WIN!  1位!' : 'LOSE…  ' + my + '位', r.win ? '#7bffa0' : '#ff8fa8');
   ctx.textAlign = 'center'; ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 15px 'Courier New', monospace";
   if (stTimer > 1.4) ctx.fillText(r.win ? 'Z / タップ で次のラウンドへ (' + CONFIG.SURF[surfaceFor(level + 1)].label + ')'
-                                   : isStock() ? 'Z / タップ でもう一度    P → タイトルへ' : lives > 0 ? 'Z / タップ でもう一度 (残機 -1)' : 'Z / タップ で おしまい', W / 2, end + 30);
+                                   : 'Z / タップ でもう一度    P → タイトルへ', W / 2, end + 30);
+}
+let hudAnim = {}, hudAnimT = 0;                      // 順位バーの区切りの今の位置(ゆっくり動かす)
+// 逆転の知らせ: 1位が入れ替わったら「逆転!」
+let vsLeader = null, leadCD = 0;
+function leaderKey() {
+  const rk = vsRanking();
+  if (!rk.length || rk[0].area <= 0) return null;
+  if (rk[1] && rk[1].area === rk[0].area) return vsLeader;   // 同点のあいだは変えない
+  return rk[0].me ? 'me' : rk[0].name;
+}
+function checkLeader(dt) {
+  if (leadCD > 0) leadCD -= dt;
+  const k = leaderKey();
+  if (k === vsLeader) return;
+  const prev = vsLeader;
+  vsLeader = k;
+  if (prev == null || k == null || leadCD > 0) return;        // 最初の1位や、入れ替わりが続くときは知らせない
+  leadCD = 2.5;
+  const r = rivals.find(q => q.name === k), col = r ? teamHex(r.team) : teamHex(0);
+  floats.push({ x: W / 2, y: FIELD_Y + 96, txt: r ? r.name + 'が逆転!' : '逆転! トップに立った!', t: 1.8, col, big: true });
+  Snd.lead(!r);
+  if (r) { if (r.sayT <= 0) rivalSay(r, 'lead'); }
+  else say('逆転だ!', 1.4, true);
+  const pr = rivals.find(q => q.name === prev);
+  if (pr && pr.sayT <= 0 && pr.dead <= 0) rivalSay(pr, 'behind');
 }
 function drawVsHud() {
   const x = 120, y = FIELD_Y + 34, w = W - 240, h = 14;
   ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
   ctx.fillStyle = '#2a3150'; ctx.fillRect(x, y, w, h);
   const rk = vsRanking();
-  let cx = x;
-  for (const e of rk) { const a = e.area / initOpen * w; ctx.fillStyle = e.col; ctx.fillRect(cx, y, a, h); if (e.me) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(cx, y, a, h); } cx += a; }
+  // 順位が入れ替わると、色の区切りがゆっくりすべって新しい並びへ(パッと入れ替えない)
+  const dtH = clamp(blinkT - hudAnimT, 0, 0.1), kH = 1 - Math.exp(-dtH * 5);
+  hudAnimT = blinkT;
+  let cx = x, meBox = null;
+  for (const e of rk) {
+    const a = e.area / initOpen * w, key = e.me ? 'me' : e.name;
+    const an = hudAnim[key] || (hudAnim[key] = { x: cx, w: a });
+    an.x += (cx - an.x) * kH; an.w += (a - an.w) * kH;
+    cx += a;
+  }
+  for (const e of rk.slice().reverse()) {             // 下位から描いて、上位を上に重ねる
+    const an = hudAnim[e.me ? 'me' : e.name];
+    ctx.fillStyle = e.col; ctx.fillRect(an.x, y, an.w, h);
+    if (e.me) meBox = an;
+  }
+  if (meBox) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(meBox.x, y, meBox.w, h); }
   ctx.fillStyle = '#8a8fa8'; ctx.fillRect(cx, y, w * neutralArea() / initOpen, h);
   const myRank = rk.findIndex(e => e.me) + 1;
   // バーの下: 色ごとの割合(自分・CPU の並び順のまま。自分は白い枠)
@@ -4627,7 +4684,7 @@ function captureArt() {
     }
     const img = c2.toDataURL('image/jpeg', 0.82);
     if (typeof img !== 'string' || img.indexOf('data:image') !== 0) return false;
-    gallery.unshift({ img, s: surf.key, p: Math.round(percent() * 10) / 10, d: todayStr(), sc: score });
+    gallery.unshift({ img, s: surf.key, p: Math.round(percent() * 10) / 10, d: todayStr(), sc: score, mid: lapse.id });
     gallery = gallery.slice(0, GALLERY_MAX);
     store.set('qlaim.gallery', gallery);
     return true;
@@ -4642,7 +4699,7 @@ function drawGallery(t) {
   galRects = [];
   if (!gallery.length) {
     ctx.fillStyle = '#aab6dd'; ctx.font = "bold 15px 'Courier New', monospace";
-    ctx.fillText('エリアをクリアすると、ここに作品が残ります', W / 2, 380);
+    ctx.fillText('ナワバリバトルで勝つと、ここに作品が残ります', W / 2, 380);
   }
   gallery.forEach((g, i) => {
     const col = i % 4, row = (i / 4) | 0, x = 58 + col * 134, y = 128 + row * 104, sz = 92;
@@ -4651,20 +4708,139 @@ function drawGallery(t) {
     const im = galImg(g.img);
     if (im && im.complete && im.naturalWidth) ctx.drawImage(im, x, y, sz, sz);
     else { ctx.fillStyle = '#1b2340'; ctx.fillRect(x, y, sz, sz); }
+    if (g.lapse) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x + sz - 22, y + 2, 20, 18); ctx.fillStyle = '#9dffea'; ctx.font = "bold 12px 'Courier New', monospace"; ctx.textAlign = 'center'; ctx.fillText('▶', x + sz - 12, y + 16); }
     ctx.textAlign = 'left'; ctx.fillStyle = '#cdd8ff'; ctx.font = "10px 'Courier New', monospace";
     ctx.fillText((CONFIG.SURF[g.s] ? CONFIG.SURF[g.s].label : g.s) + ' ' + g.p + '%', x + sz + 3 - 92, y + sz + 12);
   });
   if (galleryBig && gallery[gallerySel]) {        // 大きく表示
-    const g = gallery[gallerySel], im = galImg(g.img), sz = 480, x = (W - sz) / 2, y = 150;
+    const g = gallery[gallerySel], sz = 480, x = (W - sz) / 2, y = 150;
+    // タイムラプスつきの作品は、撮った絵を順に見せる(最後の絵で少し止まる)
+    const lp = Array.isArray(g.lapse) && g.lapse.length ? g.lapse : null, fi = lp ? Math.floor(blinkT * 5) % (lp.length + 6) : 0;
+    const im = galImg(lp && fi < lp.length ? lp[fi] : g.img);
     ctx.fillStyle = 'rgba(4,6,16,0.92)'; ctx.fillRect(40, 118, W - 80, 610);
     if (im && im.complete && im.naturalWidth) ctx.drawImage(im, x, y, sz, sz);
     ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = "bold 16px 'Courier New', monospace";
-    ctx.fillText((CONFIG.SURF[g.s] ? CONFIG.SURF[g.s].label : g.s) + '  ' + g.p + '%  SCORE ' + (g.sc | 0) + '  ' + (g.d || ''), W / 2, y + sz + 34);
+    ctx.fillText((CONFIG.SURF[g.s] ? CONFIG.SURF[g.s].label : g.s) + '  ' + g.p + '%  SCORE ' + (g.sc | 0) + '  ' + (g.d || '') + (lp ? '  ▶ タイムラプス' : ''), W / 2, y + sz + 34);
   }
   ctx.textAlign = 'center'; ctx.fillStyle = '#6d7ba8'; ctx.font = "bold 12px 'Courier New', monospace";
   ctx.fillText(galleryBig ? '←→ となり / Z・X もどる' : '←→↑↓ えらぶ / Z 大きく / X もどる', W / 2, 772);
 }
 let galRects = [];
+
+
+/* ---- タイムラプス: 試合中の陣地の広がりを、結果画面で数秒の早送りで見せる ----
+   試合中は1秒ごとに、前の記録から変わったマスだけを覚える(盤面の grid / colA / mixA / ownA)。
+   再生中はこの4つを一時的に昔の盤面に差しかえて、いつもの描き方(平面・立体)でそのまま描く。
+   勝った試合なら、再生しながら小さな絵を撮ってギャラリーの作品につける(ギャラリーで動く) */
+const LAPSE_EVERY = 1.0, LAPSE_PLAY = 5, LAPSE_CAPS = 16, LAPSE_KEEP = 8;
+let lapse = { id: 0, base: null, last: null, frames: [], t: 0 };
+let lapsePlay = null;
+const lapseBtn = { x: 0, y: 0, w: 170, h: 40 };
+function lapseSnap() {
+  const g = grid.slice();
+  for (let i = 0; i < g.length; i++) if (g[i] === TRAIL || g[i] === RTRAIL) g[i] = OPEN;   // 描きかけの線は残さない
+  return { g, a: colA.slice(), m: mixA.slice(), o: ownA.length === g.length ? ownA.slice() : new Uint8Array(g.length) };
+}
+function lapseReset() {
+  lapse = { id: lapse.id + 1, base: lapseSnap(), last: null, frames: [], t: 0 };
+  lapse.last = lapseSnap();
+}
+function lapseRecord(dt, force) {
+  if (!lapse.base || lapse.base.g.length !== surf.N) return;
+  lapse.t += dt;
+  if (!force && lapse.t < LAPSE_EVERY) return;
+  lapse.t = 0;
+  const now = lapseSnap(), L = lapse.last, idx = [];
+  for (let i = 0; i < surf.N; i++) if (now.g[i] !== L.g[i] || now.a[i] !== L.a[i] || now.m[i] !== L.m[i] || now.o[i] !== L.o[i]) idx.push(i);
+  if (!idx.length) return;
+  const f = { i: Int32Array.from(idx), g: new Uint8Array(idx.length), a: new Uint8Array(idx.length), m: new Uint8Array(idx.length), o: new Uint8Array(idx.length) };
+  idx.forEach((c, k) => { f.g[k] = now.g[c]; f.a[k] = now.a[c]; f.m[k] = now.m[c]; f.o[k] = now.o[c]; });
+  lapse.frames.push(f);
+  lapse.last = now;
+}
+function canLapse() { return state === 'vsres' && !lapsePlay && lapse.frames.length > 1 && lapse.base && lapse.base.g.length === surf.N; }
+function startLapse() {
+  if (!canLapse()) return false;
+  const b = lapse.base;
+  lapsePlay = { i: 0, t: 0, hold: 0, save: { grid, colA, mixA, ownA }, caps: [], capEvery: Math.max(1, Math.round(lapse.frames.length / LAPSE_CAPS)) };
+  grid = b.g.slice(); colA = b.a.slice(); mixA = b.m.slice(); ownA = b.o.slice();
+  lapseRedraw(); resHide = true; resIdle = 9;
+  floats = []; particles = []; rings = []; speech.t = 0;
+  Snd.select();
+  return true;
+}
+function applyLapseFrame(f) {
+  for (let k = 0; k < f.i.length; k++) { const c = f.i[k]; grid[c] = f.g[k]; colA[c] = f.a[k]; mixA[c] = f.m[k]; ownA[c] = f.o[k]; }
+  lapseRedraw();
+}
+// 盤面を描き直す(平面は焼き込み直し、立体は線の色のキャッシュを捨てるだけ)
+function lapseRedraw() { lineCacheT = -99; if (!surf.is3D) redrawField(); }
+function updateLapse(dt) {
+  const P = lapsePlay, n = lapse.frames.length, step = Math.max(0.03, LAPSE_PLAY / n);
+  if (P.i >= n) { P.hold += dt; if (P.hold > 1.4) endLapse(true); return; }
+  P.t += dt;
+  while (P.t >= step && P.i < n) {
+    P.t -= step;
+    if (P.i % P.capEvery === 0) lapseCapture();          // 直前に描いた画面を1枚
+    applyLapseFrame(lapse.frames[P.i++]);
+  }
+}
+// いまの画面を小さな絵にする(平面は焼き込んだフィールド、立体は画面の真ん中)
+function lapseCapture() {
+  if (!lapsePlay || lapsePlay.caps.length >= LAPSE_CAPS + 1) return;
+  try {
+    const tw = 96, th = 96, c2 = document.createElement('canvas');
+    c2.width = tw; c2.height = th;
+    const x2 = c2.getContext('2d');
+    if (!x2 || !x2.drawImage) return;
+    if (!surf.is3D) {
+      const k = Math.min(tw / fieldC.width, th / fieldC.height), w2 = fieldC.width * k, h2 = fieldC.height * k;
+      x2.fillStyle = theme().field; x2.fillRect(0, 0, tw, th);
+      x2.drawImage(fieldC, (tw - w2) / 2, (th - h2) / 2, w2, h2);
+    } else {
+      const sz = Math.min(W, H - FIELD_Y) * 0.8;
+      x2.drawImage(cv, cam.cx - sz / 2, cam.cy - sz / 2, sz, sz, 0, 0, tw, th);
+    }
+    const img = c2.toDataURL('image/jpeg', 0.7);
+    if (typeof img === 'string' && img.indexOf('data:image') === 0) lapsePlay.caps.push(img);
+  } catch (e) {}
+}
+// 再生をやめて、盤面を試合の終わりの状態にもどす。最後まで見たら、勝った試合の作品に絵をつける
+function endLapse(done) {
+  const P = lapsePlay;
+  if (!P) return;
+  lapseCapture();
+  grid = P.save.grid; colA = P.save.colA; mixA = P.save.mixA; ownA = P.save.ownA;
+  lapseRedraw(); if (!vsWin) sealRemaining(); resHide = false;
+  lapsePlay = null;
+  const g = gallery[0];
+  if (done && P.caps.length > 2 && g && g.mid === lapse.id && !g.lapse) {
+    g.lapse = P.caps;
+    gallery.forEach((q, i) => { if (i >= LAPSE_KEEP) delete q.lapse; });   // 保存の容量を食いすぎないよう、新しい作品だけ
+    store.set('qlaim.gallery', gallery);
+    floats.push({ x: W / 2, y: FIELD_Y + 90, txt: 'ギャラリーにタイムラプスを保存', t: 1.8, col: '#9dffea' });
+  }
+}
+function drawLapseBtn() {
+  if (!canLapse() || stTimer < 1.0) return;
+  lapseBtn.x = W - viewBtn.w - lapseBtn.w - 24; lapseBtn.y = H - lapseBtn.h - 14;
+  ctx.fillStyle = 'rgba(20,26,56,0.9)'; ctx.fillRect(lapseBtn.x, lapseBtn.y, lapseBtn.w, lapseBtn.h);
+  ctx.strokeStyle = '#9dffea'; ctx.lineWidth = 2; ctx.strokeRect(lapseBtn.x + 1, lapseBtn.y + 1, lapseBtn.w - 2, lapseBtn.h - 2);
+  ctx.fillStyle = '#9dffea'; ctx.font = "bold 15px 'Courier New', monospace"; ctx.textAlign = 'center';
+  ctx.fillText('▶ タイムラプス(T)', lapseBtn.x + lapseBtn.w / 2, lapseBtn.y + 26);
+}
+function drawLapseHud() {
+  const P = lapsePlay, n = lapse.frames.length, k = Math.min(1, (P.i + P.t / Math.max(0.03, LAPSE_PLAY / n)) / n);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, FIELD_Y + 4, W, 44);
+  ctx.fillStyle = '#9dffea'; ctx.font = "bold 15px 'Courier New', monospace";
+  const sec = Math.round(k * n * LAPSE_EVERY);
+  ctx.fillText('タイムラプス  ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'), W / 2, FIELD_Y + 24);
+  ctx.fillStyle = '#2a3150'; ctx.fillRect(W / 2 - 160, FIELD_Y + 34, 320, 6);
+  ctx.fillStyle = '#9dffea'; ctx.fillRect(W / 2 - 160, FIELD_Y + 34, 320 * k, 6);
+  ctx.fillStyle = '#cdd8ff'; ctx.font = "bold 12px 'Courier New', monospace";
+  ctx.fillText('どれかのキー / タップ でとめる', W / 2, H - 24);
+}
 
 /* ---- あそびかた(ヘルプ)。タイトルの H キー、ポーズメニューから ---- */
 let helpFrom = 'title';
@@ -4947,7 +5123,18 @@ function updateWorld(dt, stepped) {
   stats.time += dt;
   // ナワバリバトル: 時間切れで勝負
   if (pendingEnds.length) { const fs = pendingEnds; pendingEnds = []; for (const f of fs) f(); if (state !== 'play') return; }
-  if (hasRivals() && !isStock()) { vsT -= dt; if (vsT <= 0) { vsT = 0; vsEnd(); return; } }
+  if (hasRivals()) { checkLeader(dt); lapseRecord(dt); }
+  if (hasRivals() && !isStock()) {
+    const s0 = Math.ceil(vsT);
+    vsT -= dt;
+    if (vsT <= 0) { vsT = 0; Bgm.climax = false; vsEnd(); return; }
+    // 決着前の10秒: BGM が転調して盛り上がる。画面は光らせず、文字と秒読みの音だけ
+    if (vsT <= CONFIG.CLIMAX_TIME && !Bgm.climax) {
+      Bgm.climax = true;
+      floats.push({ x: W / 2, y: FIELD_Y + 120, txt: 'ラスト' + CONFIG.CLIMAX_TIME + '秒!', t: 1.8, col: '#ffd76b', big: true });
+    }
+    if (Math.ceil(vsT) < s0 && vsT <= CONFIG.CLIMAX_TIME) Snd.tick(vsT <= 3);
+  }
   updateParticles(dt);
   updateFloats(dt);
 }
@@ -4968,6 +5155,7 @@ function tickMeta(dt) {
   if (surf && grid) { const p = surf.screenOf(player.c); pan = (p.x - W / 2) / (W / 2) * 0.7; }
   Snd.react(cut, pan);
   if (state === 'ready' && stTimer >= CONFIG.READY_TIME) setState('play');
+  if (lapsePlay) { if (state === 'vsres') updateLapse(dt); else endLapse(false); }
   updateCamera(dt);
 }
 
@@ -5078,6 +5266,7 @@ function drawRoller(p, s, t) {
   ctx.beginPath(); ctx.moveTo(rx - px * half, ry - py * half); ctx.lineTo(rx + px * half, ry + py * half); ctx.stroke();
 }
 function drawPlayer(t) {
+  if (lapsePlay) return;                               // タイムラプス中はキャラを出さない(盤面だけ見せる)
   const p = playerScreen(), s = 2 * (surf.is3D ? 1 : sprK());
   if (deathTimer > 0) { // くるくる回って小さくなる
     ctx.save();
@@ -5166,6 +5355,7 @@ function drawItem(it, p, faint) {
   ctx.globalAlpha = 1;
 }
 function drawItems() {
+  if (lapsePlay) return;                               // タイムラプス中はキャラを出さない(盤面だけ見せる)
   for (const it of items) {
     if (surf.is3D && !visA[it.c]) { drawOffMarker(surf.screenOf(it.c), ITEMS[it.k].col, 5); continue; }   // 裏側は方向だけ
     drawItem(it, surf.screenOf(it.c), surf.is3D && surf.twoSided && !frontA[it.c]);
@@ -6073,7 +6263,7 @@ function renderOverlay() {
     return;
   }
 
-  if (state === 'vsres') { if (resHide) drawObserve(); else drawVsRes(t); drawViewBtn(); return; }
+  if (state === 'vsres') { if (lapsePlay) { drawLapseHud(); return; } if (resHide) drawObserve(); else drawVsRes(t); drawViewBtn(); drawLapseBtn(); return; }
   if (state === 'vssetup') { drawVsSetup(t); return; }
   if (state === 'matchopts') { drawMatchOpts(t); return; }
   if (state === 'keycfg') { drawKeyCfg(t); return; }
@@ -6180,6 +6370,8 @@ function onKeyDown(e) {
     else if (k === 'x' || k === 'X' || k === 'Escape') { setState(matchFrom); Snd.select(); }
     e.preventDefault(); return;
   }
+  if (lapsePlay) { endLapse(false); e.preventDefault(); return; }       // タイムラプス中はどのキーでもとめる
+  if ((k === 't' || k === 'T') && canLapse() && stTimer > 1.0) { startLapse(); e.preventDefault(); return; }
   if ((k === 'v' || k === 'V') && isResult() && stTimer > 1.0) { resHide = !resHide; Snd.select(); e.preventDefault(); return; }
   if (state === 'help') {
     if (k === 'z' || k === 'Z' || k === 'x' || k === 'X' || k === 'Escape' || k === 'Enter' || k === ' ' || k === 'h' || k === 'H' || k === 'p' || k === 'P') closeHelp();
@@ -6431,6 +6623,8 @@ cv.addEventListener('pointerdown', e => {
     return;
   }
   if (isResult()) {
+    if (lapsePlay) { endLapse(false); return; }
+    if (stTimer > 1.0 && canLapse() && inRect(p, lapseBtn)) { startLapse(); return; }
     if (stTimer > 1.0 && inRect(p, viewBtn)) { resHide = !resHide; Snd.select(); return; }
     resPtrs.set(e.pointerId, p);
     if (resPtrs.size === 2) { const [a, b] = [...resPtrs.values()]; resPinch = Math.hypot(a.x - b.x, a.y - b.y); resDrag = null; return; }
