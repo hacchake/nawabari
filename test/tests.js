@@ -1503,78 +1503,22 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 }
 
 
-// ---- 95) PARTY: 3チーム対戦 ----
-{
-  settings.mode = 'PARTY'; backToTitle();
-  onAction(); assert('PARTY: タイトルで決定するとロビー', state === 'lobby');
-  lobbyKey('z', true); assert('押しっぱなし(キーリピート)ではスタートしない', state === 'lobby');
-  stTimer = 1;
-  party.slots = [true, false, false]; party.size = 1; party.sel = 1; lobbyKey('ArrowRight');
-  assert('ロビー: 黄を人間に切り替え', party.slots[1] === true);
-  party.sel = 2; lobbyKey('z'); assert('ロビー: Zでも切り替え(青=人間)', party.slots[2] === true);
-  lobbyKey('z'); assert('もう一度で青=CPU', party.slots[2] === false);
-  party.sel = 4; lobbyKey('ArrowRight'); lobbyKey('ArrowRight'); assert('ロビー: CPUの強さを変える', party.cpu !== undefined);
-  party.sel = 3; lobbyKey('ArrowRight'); assert('ロビー: 1チームの人数を増やす', party.size === 2); lobbyKey('ArrowLeft');
-  party.cpu = 2;
-  let err = null; try { render(); } catch (e) { err = e.stack; } assert('ロビーの描画', !err, err);
-  // タップ: 青の行をタップすると切り替わる
-  const rr = lobbyRects.find(q => q.act === 'slot' && q.i === 2);
-  lobbyTap({ x: rr.x + 10, y: rr.y + 10 }); assert('タップで青を人間に', party.slots[2] === true);
-  lobbyTap({ x: rr.x + 10, y: rr.y + 10 }); party.sel = 5;
-  // タイトルのタップでもロビーへ
-  backToTitle(); onAction(); stTimer = 1;
-  lobbyKey('z');
-  assert('スタートで3チーム(人間2+CPU1)', state === 'ready' && rivals.length === 3 && rivals[0].human === 1 && rivals[1].human === 2 && rivals[2].human === 0);
-  { const P = perimeterThirds(), L = 2 * (GW - 1) + 2 * (GH - 1);
-    const pos = c => { const x = c % GW, y = (c / GW) | 0; return y === GH - 1 ? (GW >> 1) - x + (x > (GW >> 1) ? L : 0) : x === 0 ? (GW >> 1) + (GH - 1 - y) : y === 0 ? (GW >> 1) + (GH - 1) + x : (GW >> 1) + (GH - 1) + (GW - 1) + y; };
-    const d = [pos(P[1]) - pos(P[0]), pos(P[2]) - pos(P[1]), L - (pos(P[2]) - pos(P[0]))];
-    assert('スタート地点は外周を3等分(公平)', d.every(v => Math.abs(v - L / 3) <= 2) && P.every(c => isBoundary(c)), d.join()); }
-  assert('チームの色は赤・黄・青', rivals.map(r => INK_COLORS[r.col]).join() === [INK_COLORS[6], INK_COLORS[5], INK_COLORS[8]].join());
-  setState('play'); sparxes = [];
-  // P2 は矢印キーで動く(P1 は動かない)
-  const p1 = [rivals[0].fx, rivals[0].fy], p2 = [rivals[1].fx, rivals[1].fy];
-  codesDown.add('ArrowDown'); codesDown.add('ArrowRight');
-  for (let i = 0; i < 30; i++) update(1 / 60);
-  codesDown.clear();
-  assert('P2は矢印キーで斜めに動いて線を引く', rivals[1].drawing && rivals[1].fx > p2[0] + 1 && rivals[1].fy > p2[1] + 1);
-  assert('P1は動かない', rivals[0].fx === p1[0] && rivals[0].fy === p1[1]);
-  // P1 が WASD で P2 の線を切る
-  const q = rivals[1], hitCell = q.trail[Math.floor(q.trail.length / 2)];
-  const r1 = rivals[0]; r1.c = surf.nb[hitCell * 4 + 3] >= 0 ? surf.nb[hitCell * 4 + 3] : hitCell; r1.drawing = true; r1.trail = [];
-  rivalStep(r1, hitCell);
-  assert('ほかのチームの線に入ると、その線を切る', q.dead > 0);
-  // 人間1人ならどのキーでも
-  party.slots = [true, false, false]; codesDown.add('KeyL');
-  assert('人間1人ならIJKLでも動ける', humanInput(1).v && humanInput(1).v[0] === 1); codesDown.clear();
-  party.slots = [true, true, false];
-  // 試合終了と順位
-  { let n = [30, 50, 10]; for (let i = 0; i < surf.N; i++) if (grid[i] === OPEN) { for (let t2 = 0; t2 < 3; t2++) if (n[t2] > 0) { grid[i] = WALL; ownA[i] = 2 + t2; n[t2]--; break; } } recountAreas(); }
-  partyEnd();
-  assert('時間切れで順位(黄=P2が1位)', state === 'partyres' && partyRank[0].team === 1 && partyRank[2].team === 2);
-  err = null; try { render(); } catch (e) { err = e.stack; } assert('結果画面の描画', !err, err);
-  stTimer = 2; onKeyDown({ key: 'z', preventDefault() {} });
-  assert('Zで次のラウンド', state === 'ready' && level === 2 && rivals.length === 3);
-  assert('PARTYでは記録を残さない・buddyなし', buddies.length === 0);
-  settings.mode = 'VS';
-}
-
-
 // ---- 96) チームの色の揺らぎ・上塗り・中立・ハーモニー ----
 {
   const shades = new Set(); for (let i = 0; i < 40; i++) shades.add(palHex(teamNo(2)));
   assert('チームの色は系統の中で揺らぐ(青系4色)', shades.size === 4 && [...shades].every(c => TEAM_SHADES[2].includes(c)));
   assert('中立の色: 赤+青=紫系', NEUTRAL_MIX['02'].includes(palHex(neutralNo(2, 0))));
-  settings.mode = 'PARTY'; party.slots = [true, true, true]; startGame(); setState('play'); sparxes = []; items = [];
-  // 赤(P1)の陣地を作る
-  const R = rivals[0], B = rivals[2];
-  const cells = []; for (let y = 60; y < 70; y++) for (let x = 40; x < 60; x++) { const c = idx(x, y); grid[c] = WALL; ownA[c] = 2 + R.id; colA[c] = teamNo(0); cells.push(c); }
+  settings.mode = 'VS'; settings.vsCpu = '3'; startGame(); setState('play'); sparxes = []; items = [];
+  // 黄(CPU)の陣地を作る
+  const R = rivals[0], B = rivals[1];
+  const cells = []; for (let y = 60; y < 70; y++) for (let x = 40; x < 60; x++) { const c = idx(x, y); if (grid[c] !== OPEN) continue; grid[c] = WALL; ownA[c] = 2 + R.id; colA[c] = teamNo(R.team); cells.push(c); }
   claimed += cells.length; recountAreas();
   const r0 = R.area;
   // 青が上塗りで赤の陣地を走る → 中立
   B.overT = 5; B.c = idx(50, 65); B.fx = 50.5; B.fy = 65.5; B.drawing = false;
   const n1 = overPaint(50.5, 65.5, 2 + B.id, B.team);
   assert('相手の陣地を上塗りすると中立になる', n1 > 0 && neutralArea() === n1 && R.area === r0 - n1);
-  assert('中立は2色が混ざった色(赤+青=紫系)', NEUTRAL_MIX['02'].includes(palHex(colA[idx(50, 65)])));
+  assert('中立は2色が混ざった色(黄+青=緑系)', NEUTRAL_MIX['12'].includes(palHex(colA[idx(50, 65)])));
   assert('中立になったばかりは、すぐには自分の色にならない', overPaint(50.5, 65.5, 2 + B.id, B.team) === 0);
   blinkT += 1.5;
   const n2 = overPaint(50.5, 65.5, 2 + B.id, B.team);
@@ -1583,25 +1527,21 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   // 上塗り中は陣地の上を歩ける
   assert('上塗り中は陣地の上を歩ける', rivalStep(B, idx(51, 65)) && B.c === idx(51, 65));
   B.overT = 0;
-  // アイテム: PARTY は上塗りだけ
-  let only = true; for (let i = 0; i < 30; i++) if (pickItemKind() !== 'over') only = false;
-  assert('PARTYのアイテムは上塗りだけ', only);
+  // アイテム: 上塗りは対戦だけ
   settings.mode = 'TOUR'; let none = true; for (let i = 0; i < 200; i++) if (pickItemKind() === 'over') none = false;
   assert('ひとりのモードに上塗りは出ない', none);
   // 音(音声なし環境でも落ちない)
-  settings.mode = 'PARTY'; startGame(); setState('play');
+  settings.mode = 'VS'; startGame(); setState('play');
   let err = null; try { rivals[0].drawing = true; updateVoices(); rivals[0].drawing = false; updateVoices(); Snd.voiceStopAll(); } catch (e) { err = e.stack; }
   assert('描く音のハーモニー(音声なし環境で例外なし)', !err, err);
   err = null; try { rivals[1].overT = 3; render(); } catch (e) { err = e.stack; } assert('上塗り中の描画', !err, err);
-  settings.mode = 'VS'; party.slots = [true, true, false];
+  settings.mode = 'VS'; settings.vsCpu = 'AUTO';
 }
 
 
 // ---- 97) 上塗りアイテムの出やすさ・生き返りの表示 ----
 {
-  settings.mode = 'PARTY'; party.slots = [true, false, false]; startGame(); setState('play'); items = []; itemTimer = 0;
-  updateItems(1 / 60);
-  assert('PARTYはすぐ上塗りが出て、6秒ごと', items.length === 1 && items[0].k === 'over' && Math.abs(itemTimer - 6) < 0.1);
+  settings.mode = 'VS'; startGame(); setState('play'); items = [];
   let err = null;
   try { const r = rivals[1]; rivalFail(r, 'qix'); render(); r.dead = 0.001; updateRivals(0.01); render(); } catch (e) { err = e.stack; }
   assert('やられている間の輪・復活の輪の描画', !err && rivals[1].dead === 0 && rivals[1].inv > 0, err);
@@ -1611,15 +1551,7 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
 
 // ---- 98) 魂の演出・チームの人数 ----
 {
-  settings.mode = 'PARTY'; party.slots = [true, false, false]; party.size = 5; startGame(); setState('play');
-  assert('1チーム5人で15人', rivals.length === 15 && rivals.filter(r => r.team === 0).length === 5 && rivals.filter(r => r.human).length === 1);
-  assert('並びは赤・黄・青の交互', rivals.slice(0, 6).map(r => r.team).join() === '0,1,2,0,1,2');
-  // 味方の線には入れない
-  const a = rivals[0], b = rivals[3];
-  b.drawing = true; const bc = idx(40, 80); grid[bc] = RTRAIL; b.trail = [bc];
-  a.drawing = true; a.trail = [];
-  assert('味方の線は切らない(入れない)', rivalStep(a, bc) === false && b.dead <= 0);
-  grid[bc] = OPEN; b.trail = []; b.drawing = false; a.drawing = false;
+  settings.mode = 'VS'; settings.vsCpu = '7'; startGame(); setState('play');
   // 魂: 昇って、戻ってくる
   const r = rivals[4]; rivalFail(r, 'qix');
   r.dead = CONFIG.RIVAL_RESPAWN * 0.8; const up = soulPos(r);
@@ -1629,47 +1561,27 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   assert('魂はまず上へ昇る', up.up && up.y < r.soul.y);
   assert('復活の前に戻る場所へ着く', !back.up && Math.hypot(last.x - home.x, last.y - home.y) < 3);
   let err = null; try { render(); death('テスト'); render(); } catch (e) { err = e.stack; } assert('魂の描画(ファイター・自機)', !err, err);
-  // 15人でも重すぎない(40秒ぶんの更新)
+  // 8人でも重すぎない(20秒ぶんの更新)
   const t0 = Date.now(); let f = 0;
-  for (; f < 60 * 20 && state === 'play'; f++) { blinkT += 1 / 60; update(1 / 60); }
-  assert('15人でも1フレーム2ms未満(更新)', (Date.now() - t0) / Math.max(1, f) < 2, ((Date.now() - t0) / f).toFixed(2));
-  party.size = 1; settings.mode = 'VS';
+  for (; f < 60 * 20 && state === 'play'; f++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); }
+  assert('8人でも1フレーム2ms未満(更新)', (Date.now() - t0) / Math.max(1, f) < 2, ((Date.now() - t0) / f).toFixed(2));
+  settings.vsCpu = 'AUTO';
 }
 
 
-// ---- 99) 立体の対戦・画面分割 ----
+// ---- 99) 立体の対戦 ----
 {
-  settings.mode = 'PARTY'; party.slots = [true, true, false]; party.size = 2;
-  startGame(); level = 2; initLevel(2); setState('play');
+  settings.mode = 'VS'; startGame(); level = 2; initLevel(2); setState('play');
   assert('ラウンド2は立体(立方体)', surf.is3D && surf.key === CONFIG.TOUR[1]);
-  assert('立体でも6人・全員が線の上から', rivals.length === 6 && rivals.every(r => isBoundary(r.c)));
-  const homes = [0, 1, 2].map(t => rivals.find(r => r.team === t).home);
-  assert('3チームの基地は離れている', cellDist(homes[0], homes[1]) > 8 && cellDist(homes[1], homes[2]) > 8 && cellDist(homes[0], homes[2]) > 8);
-  // 人間2人 → 2画面
-  assert('人間2人なら画面を2つに分ける', splitHumans().length === 2);
-  let err = null; try { for (let i = 0; i < 30; i++) { blinkT += 1 / 60; tickMeta(1 / 60); update(1 / 60); } render(); } catch (e) { err = e.stack; }
-  assert('分割画面の描画・カメラ', !err && paneCams[1] && paneCams[2], err);
-  // P2 が矢印で動いて線を引く(P2 の画面のカメラで向きを決める)
-  const p2 = rivals.find(r => r.human === 2), c0 = p2.c;
-  const pc = camOfHuman(p2);
-  const opens = [0, 1, 2, 3].map(k2 => surf.nb[p2.c * 4 + k2]).filter(n => n >= 0 && grid[n] === OPEN);
-  const tgt = opens[0], a = withCam(pc, () => surf.screenOf(p2.c)), b = withCam(pc, () => surf.screenOf(tgt));
-  const v = [b.x - a.x, b.y - a.y], lv = Math.hypot(v[0], v[1]);
-  codesDown.clear();
-  codesDown.add(v[1] < -Math.abs(v[0]) ? 'ArrowUp' : v[1] > Math.abs(v[0]) ? 'ArrowDown' : v[0] < 0 ? 'ArrowLeft' : 'ArrowRight');
-  for (let i = 0; i < 40 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); }
-  codesDown.clear();
-  assert('P2は自分の画面の向きで動いて線を引く', p2.c !== c0 && (p2.drawing || p2.dead > 0 || isBoundary(p2.c)));
-  // CPU だけの立体の試合が進む
-  party.slots = [false, false, false]; party.size = 1; startGame(); level = 2; initLevel(2); setState('play');
-  for (let i = 0; i < 60 * 25 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); }
+  assert('立体でも全員が線の上から', rivals.length === vsCpuCount(2) && rivals.every(r => isBoundary(r.c)));
+  for (let i = 0; i < 60 * 25 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); }
   assert('立体でもCPUが陣地を取る', rivalAreaSum() > 0);
-  // VS の立体
-  settings.mode = 'VS'; startGame(); level = 3; initLevel(3); setState('play');
+  let err = null;
+  // 球
+  startGame(); level = 3; initLevel(3); setState('play');
   assert('VSも立体(球)でCPUが出る(全員別の基地)', surf.is3D && rivals.length === vsCpuCount(3) && rivals.every(r => isBoundary(r.c)) && new Set(rivals.map(r => r.home)).size === rivals.length && !earthMode());
   err = null; try { for (let i = 0; i < 60 * 10 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); } render(); } catch (e) { err = e.stack; }
   assert('VSの立体が例外なく進む', !err, err);
-  party.slots = [true, true, false]; party.size = 1;
 }
 
 
@@ -1692,17 +1604,16 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   err = null; try { render(); matchSel = MATCH_ITEMS.findIndex(it => it.k === 'matchTime'); matchAdjust(1); render(); } catch (e) { err = e.stack; }
   assert('対戦の設定の画面', !err && state === 'matchopts' && settings.matchTime === 120, err);
   settings.matchTime = 90;
-  // キーコンフィグ: P2 の「↑」を KeyT に
+  // キーコンフィグ: 「↑」を KeyT に
   matchSel = MATCH_ITEMS.findIndex(it => it.k === '_keys'); matchAdjust(1); assert('キーコンフィグの画面へ', state === 'keycfg');
-  keySel = [1, 0]; keyCfgKey({ key: 'z' }); keyCfgKey({ key: 't', code: 'KeyT' });
-  assert('キーを変えられる', PARTY_KEYS[1].u[0] === 'KeyT');
+  keySel = [0, 0]; keyCfgKey({ key: 'z' }); keyCfgKey({ key: 't', code: 'KeyT' });
+  assert('キーを変えられる', PLAY_KEYS.u[0] === 'KeyT' && store.get('qlaim.keys', {}).u[0] === 'KeyT');
   err = null; try { render(); } catch (e) { err = e.stack; } assert('キーコンフィグの描画', !err, err);
-  keyCfgKey({ key: 'r' }); assert('R で元に戻す', PARTY_KEYS[1].u[0] === 'ArrowUp');
-  // ひとりで遊ぶとき P1 のキーでも動ける
-  PARTY_KEYS[0].u = ['KeyT']; settings.mode = 'PLANE'; startGame(); setState('play');
+  // 変えたキーで動ける
+  settings.mode = 'VS'; startGame(); setState('play');
   codesDown.add('KeyT'); const v = inputVec(); codesDown.clear();
-  assert('ひとりでもP1のキーで動ける', v && v[1] < 0);
-  PARTY_KEYS[0].u = DEFAULT_KEYS[0].u.slice();
+  assert('変えたキーで動ける', v && v[1] < 0);
+  keyCfgKey({ key: 'r' }); assert('R で元に戻す', PLAY_KEYS.u[0] === 'KeyW');
   // 掛け合い
   settings.mode = 'VS'; startGame(); setState('play');
   banterT = 0; updateBanter(0.01);
@@ -1733,7 +1644,6 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   let err = null; try { for (let i = 0; i < 60 * 15 && state === 'play'; i++) { blinkT += 1 / 60; update(1 / 60); if (deathTimer > 0) while (deathTimer > 0) update(1 / 60); } render(); } catch (e) { err = e.stack; }
   assert('悪魔のCPUで試合が進む・バーの描画', !err, err);
   settings.cpuLv = 'AUTO';
-  party.cpu = 4; assert('PARTYでも悪魔を選べる', CPU_LV[party.cpu] === '悪魔'); party.cpu = 1;
 }
 
 
