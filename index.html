@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>QLAIM 2 ─ ナワバリ陣取りアーケード</title>
-<meta name="description" content="Qix風の陣取りアーケード。平面・多面体・星型・メビウスの帯・クラインの壺の表面で線を引いて陣地を広げよう。">
-<meta property="og:title" content="QLAIM ─ 陣取りアーケード">
-<meta property="og:description" content="多面体やクラインの壺の表面で陣取り。ブラウザだけで遊べます。">
+<title>NAWABARI ─ ナワバリバトル</title>
+<meta name="description" content="線で囲んで陣地を広げるナワバリバトル。CPUと全員敵同士で、平面・多面体・球・クラインの壺の表面を塗りあおう。">
+<meta property="og:title" content="NAWABARI ─ ナワバリバトル">
+<meta property="og:description" content="CPUと陣地を塗りあう対戦ゲーム。ブラウザだけで遊べます。">
 <meta name="theme-color" content="#05060d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -292,7 +292,7 @@ const SURF_INFO = {
 };
 
 /* ---- 遊ぶ盤面(タイトル画面で ←→ で選択) ---- */
-const MODES = ['VS', 'PARTY', 'TOUR', 'DAILY', 'ZEN'].concat(Object.keys(CONFIG.SURF));
+const MODES = ['VS'];   // NAWABARI はナワバリバトルだけ(ほかのモード名は中身を削るまで内部に残っている)
 // PARTY(3チーム対戦): 赤・黄・青の3チーム。人間1〜3人(ひとつの画面で)、足りないぶんはCPU
 function isParty() { return settings.mode === 'PARTY'; }
 function hasRivals() { return isVS() || isParty(); }
@@ -716,9 +716,9 @@ const vadd   = (a, b, k) => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
 function vnorm(a) { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
 
 /* ---------------- 設定と保存(localStorage不可なら内部保持) ---------------- */
-// 保存場所は QLAIM 1 と分ける(同じ github.io の下なので、キーの頭を qlaim2. にする)
+// 保存場所は QLAIM 1・2 と分ける(同じ github.io の下なので、キーの頭を nawabari. にする)
 const store = (() => {
-  const mem = {}, ns = k => k.replace(/^qlaim\./, 'qlaim2.');
+  const mem = {}, ns = k => k.replace(/^qlaim\./, 'nawabari.');
   return {
     get(k, d) {
       k = ns(k);
@@ -739,7 +739,7 @@ const settings = Object.assign(
   store.get('qlaim.settings', {})
 );
 if (!DIFFS[settings.diff]) settings.diff = 'NORMAL';
-if (!MODES.includes(settings.mode)) settings.mode = 'TOUR';
+if (!MODES.includes(settings.mode)) settings.mode = 'VS';
 if (!MUSIC_KEYS.includes(settings.music)) settings.music = 'AUTO';
 if (!CLAIM_SND_OPTS.includes(settings.claimSnd)) settings.claimSnd = 'MIX';
 if (!['MIX', 'RAINBOW', 'ORANGE', 'PINK', 'CYAN', 'LIME', 'PURPLE', 'YELLOW', 'RED', 'BLUE'].includes(settings.ink)) settings.ink = 'MIX';
@@ -6318,8 +6318,8 @@ function updateWorld(dt, stepped) {
 function tickMeta(dt) {
   if (shakeT > 0) shakeT -= dt;
   if (state !== 'play' && Snd.voiceCount) { Snd.voiceStopAll(); for (const r of rivals) r.voice = false; }   // 試合の外では描く音を鳴らさない
-  // タイトル(TOUR/DAILY)では8秒ごとに背景の盤面を次へ
-  if (state === 'title' && (settings.mode === 'TOUR' || settings.mode === 'DAILY' || settings.mode === 'ZEN')) {
+  // タイトルでは8秒ごとに背景の盤面を次へ(ステージを1つに決めているときはそのまま)
+  if (state === 'title') {
     demoT += dt;
     if (demoT > 8) { demoT = 0; demoLv++; initLevel(demoLv); say(surf.def.label + '!', 1.6, true); }
   } else demoT = 0;
@@ -7238,13 +7238,13 @@ function renderOverlay() {
   if (state === 'title') {
     panel(56, 130, W - 112, 586);
     ctx.fillStyle = t.accent;
-    ctx.font = "bold 58px 'Courier New', monospace";
-    ctx.fillText('QLAIM 2', W / 2 + 3, 222 + 3);
+    ctx.font = "bold 62px 'Courier New', monospace";
+    ctx.fillText('NAWABARI', W / 2 + 3, 226 + 3);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText('QLAIM 2', W / 2, 222);
+    ctx.fillText('NAWABARI', W / 2, 226);
     ctx.fillStyle = '#8fa3d9';
-    ctx.font = "bold 17px 'Courier New', monospace";
-    ctx.fillText('─ 陣取りアーケード v4 ─', W / 2, 258);
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText('ナ ワ バ リ', W / 2, 262);
     // Clawd がタイトルの上を行ったり来たり
     {
       const ph = blinkT * 0.7, x = W / 2 + Math.sin(ph) * 150;
@@ -7255,57 +7255,37 @@ function renderOverlay() {
     ctx.font = "15px 'Courier New', monospace";
     ctx.fillStyle = '#cdd8ff';
     const lines = [
-      '↑↓←→ / WASD / 画面をなぞる : 移動',
-      '空き地へ進むと線を引く (ゆっくり ×2点)',
-      'Z / SPACE を押す間だけ 速く引く (×1点)',
-      '線で囲んで陣地を広げろ!  続けて囲むとコンボ',
-      'アイテム S ◆ ★ ♥ ✦ は線で囲むと手に入る',
-      '多面体・星型・クラインの壺の表面でも陣取り',
-      'AREA 3 からは ヌメリン2体 ── 分断で即クリア',
-      'X を押す間は カメラが引いて全体が見える',
+      'CPU と全員敵同士の ナワバリバトル',
+      '↑↓←→ / WASD / スティック : 移動',
+      '空き地へ進むと線を引く  Z / SPACE で速く',
+      '線で囲んで自分の色の陣地を広げろ!',
+      '相手の描きかけの線に入ると 相手をたおせる',
+      '自分の線をさわられたら やられる',
+      '時間切れで 一番広い人の勝ち',
+      '平面・立体・球・クラインの壺 …盤面が変わっていく',
     ];
-    lines.forEach((s, i) => ctx.fillText(s, W / 2, 296 + i * 24));
-
-    // 盤面モード選択
-    titleModeRect = { x: 84, y: 498, w: W - 168, h: 44 };
-    ctx.fillStyle = 'rgba(90,120,220,.16)';
-    ctx.fillRect(titleModeRect.x, titleModeRect.y, titleModeRect.w, titleModeRect.h);
-    ctx.fillStyle = t.accent;
-    ctx.font = "bold 17px 'Courier New', monospace";
-    ctx.fillText('◀  ' + modeLabel(settings.mode) + '  ▶', W / 2, 518);
-    ctx.fillStyle = '#8fa3d9';
-    ctx.font = "bold 11px 'Courier New', monospace";
-    ctx.fillText(modeSub(settings.mode) + '   (' + (MODES.indexOf(settings.mode) + 1) + '/' + MODES.length + ')', W / 2, 536);
-    // 記録: 単独の盤面ならその最高占領率、TOURならクリアした盤面の数
-    const nClear = Object.keys(CONFIG.SURF).filter(k => bestPct[k] != null).length;
-    const rec = isZen() ? '記録なし ─ のんびりどうぞ' : settings.mode === 'DAILY'
-      ? todayStr().replace(/(\d{4})(\d{2})(\d{2})/, '$1/$2/$3') + ' の記録  ' + (hiScore ? String(hiScore).padStart(7, '0') : 'まだなし')
-      : settings.mode === 'TOUR'
-      ? 'クリア ' + nClear + '/' + Object.keys(CONFIG.SURF).length + '  最高 AREA ' + ((stats.maxArea || {}).TOUR || '-')
-      : bestPct[settings.mode] != null ? '★ クリア済み  最高 ' + bestPct[settings.mode] + '%' : '未クリア';
-    ctx.fillStyle = isZen() ? '#9dffea' : bestPct[settings.mode] != null || settings.mode === 'TOUR' || settings.mode === 'DAILY' ? '#ffd76b' : '#6d7ba8';
-    ctx.fillText(rec + '    ←→ で盤面をえらぶ', W / 2, 560);
+    lines.forEach((s, i) => ctx.fillText(s, W / 2, 304 + i * 24));
 
     if (blinkOn) {
       ctx.fillStyle = '#ffd76b';
-      ctx.font = "bold 18px 'Courier New', monospace";
-      ctx.fillText('Z / SPACE / タップ でスタート', W / 2, 594);
+      ctx.font = "bold 20px 'Courier New', monospace";
+      ctx.fillText('Z / SPACE / タップ でスタート', W / 2, 540);
     }
+    ctx.fillStyle = '#8fa3d9';
+    ctx.font = "bold 12px 'Courier New', monospace";
+    ctx.fillText('スタートすると ステージ・ルール・CPU を選べます', W / 2, 564);
     // OPTIONS ボタン
-    titleOptRect = { x: W / 2 - 110, y: 614, w: 220, h: 38 };
+    titleModeRect = null;
+    titleOptRect = { x: W / 2 - 110, y: 600, w: 220, h: 38 };
     ctx.strokeStyle = '#3a4a7a';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(titleOptRect.x, titleOptRect.y, titleOptRect.w, titleOptRect.h);
     ctx.fillStyle = '#8fa3d9';
     ctx.font = "bold 15px 'Courier New', monospace";
-    ctx.fillText('OPTIONS  [X / O]', W / 2, 639);
+    ctx.fillText('OPTIONS  [X / O]', W / 2, 625);
     ctx.fillStyle = '#6d7ba8';
     ctx.font = "bold 11px 'Courier New', monospace";
-    ctx.fillText('H あそびかた / B 図鑑 / G ギャラリー / P ポーズ / M 消音 / C スクショ', W / 2, 666);
-
-    ctx.fillStyle = '#6d7ba8';
-    ctx.font = "bold 13px 'Courier New', monospace";
-    ctx.fillText(settings.mode + ' HI SCORE ' + String(hiScore).padStart(7, '0'), W / 2, 692);
+    ctx.fillText('H あそびかた / G ギャラリー / P ポーズ / M 消音 / C スクショ', W / 2, 664);
     return;
   }
 
@@ -7795,11 +7775,8 @@ function onKeyDown(e) {
     e.preventDefault(); return;
   }
 
-  // タイトル画面: ←→ で盤面モード切替
-  if (state === 'title' && (KEYDIR[k] === 'left' || KEYDIR[k] === 'right')) {
-    if (!e.repeat) cycleMode(KEYDIR[k] === 'left' ? -1 : 1);
-    e.preventDefault(); return;
-  }
+  // タイトル画面: ←→ は何もしない(モードは VS だけ)
+  if (state === 'title' && (KEYDIR[k] === 'left' || KEYDIR[k] === 'right')) { e.preventDefault(); return; }
 
   if (KEYDIR[k]) { pressDir(KEYDIR[k]); e.preventDefault(); return; }
   if (k === 'z' || k === 'Z' || k === ' ' || k === 'j') {
@@ -7932,7 +7909,7 @@ function stickSet(d) {
   stickCur = d;
   if (!d) return;
   buzz(8, 0.2);                      // 向きが変わったら、ごく短くブルッ
-  if (state === 'title' && (d === 'left' || d === 'right')) { cycleMode(d === 'left' ? -1 : 1); return; }
+  if (state === 'title' && (d === 'left' || d === 'right')) return;
   // メニューでは矢印キーと同じように選べる
   if (['options', 'pause', 'dex', 'dexcard'].includes(state)) { onKeyDown({ key: STICK_KEY[d], repeat: false, preventDefault() {} }); return; }
   pressDir(d);
@@ -7984,7 +7961,6 @@ cv.addEventListener('pointerdown', e => {
 
   if (state === 'title') {
     if (inRect(p, titleOptRect)) openOptions();
-    else if (inRect(p, titleModeRect)) cycleMode(p.x < W / 2 ? -1 : 1);
     else onAction();                                  // PARTY はロビーへ
     return;
   }

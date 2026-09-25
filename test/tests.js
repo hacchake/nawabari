@@ -272,16 +272,9 @@ initLevel(3); setState('play');
   assert('立方体: 圧殺されたQIXが除去', qixes.length === 1);
 }
 
-// ---- 23) タイトルで盤面モード切替 ----
-setState('title'); settings.mode = 'TOUR';
-cycleMode(1);
-assert('モード切替 TOUR→DAILY', settings.mode === 'DAILY' && surf.key === dailyList()[0]);
-cycleMode(1); cycleMode(1);
-assert('モード切替 DAILY→ZEN→PLANE', settings.mode === 'PLANE' && surf.key === 'PLANE');
-cycleMode(1); cycleMode(1);
-assert('モード切替 →SPHERE で盤面も球に', settings.mode === 'SPHERE' && surf.key === 'SPHERE');
-for (let i = 5; i < MODES.length; i++) cycleMode(1);
-assert('モード切替は一周する', settings.mode === 'TOUR', MODES.length);
+// ---- 23) タイトル ----
+setState('title');
+assert('モードは VS だけ', MODES.length === 1 && MODES[0] === 'VS');
 for (let i = 0; i < 60; i++) tickMeta(1/60);
 assert('タイトル中も動作(カメラ回転で例外なし)', state === 'title');
 
@@ -670,15 +663,14 @@ settings.mode = 'PLANE'; startGame(); stTimer = 2; tickMeta(0.016); player.invul
 
 // ---- 45) タイトルのデモ ----
 {
-  settings.mode = 'TOUR'; backToTitle(); cycleMode(0);
+  settings.mode = 'VS'; settings.stageSel = 'TOUR'; backToTitle(); demoT = 0; demoLv = 1; initLevel(1);
   const k0 = surf.key;
   for (let i = 0; i < 9 * 60; i++) tickMeta(1/60);
-  assert('タイトル(TOUR)で背景の盤面が巡る', surf.key !== k0 && state === 'title', k0 + '→' + surf.key);
-  startGame();
-  assert('スタートするとAREA1の盤面から', surf.key === surfaceFor(1) && level === 1);
-  settings.mode = 'CUBE'; backToTitle(); cycleMode(0);
+  assert('タイトルで背景の盤面が巡る', surf.key !== k0 && state === 'title', k0 + '→' + surf.key);
+  settings.stageSel = 'CUBE'; backToTitle(); demoT = 0;
   for (let i = 0; i < 9 * 60; i++) tickMeta(1/60);
-  assert('単独の盤面を選んでいるときは巡らない', surf.key === 'CUBE');
+  assert('ステージを1つに決めているときは巡らない', surf.key === 'CUBE');
+  settings.stageSel = 'TOUR';
 }
 
 
