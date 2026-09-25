@@ -66,6 +66,17 @@ QLAIM 2(`C:\Users\sisho\Desktop\qlaim2`、GitHub `hacchake/qlaim2`)は機能が�
 4. タイトル → **「NAWABARI」+ 下に小さく「ナワバリ」**
 5. 保存キー → `nawabari.` にする
 
+### 済んだこと(2026-09-25)
+- タイトルを NAWABARI(+ナワバリ)、保存キー `nawabari.`、`MODES = ['VS']`(ほかのモードの中身はまだ残っている)
+- PARTY を削除(ロビー・画面分割・人間ファイター)。キーコンフィグは1人ぶん `PLAY_KEYS`
+- 線をネオン風に(`inkBand` の白い芯、平面の境界の白い芯は `redrawField`、立体は `lineCiCalc` を白寄りに)
+- 大きく囲んだときの和柄 `BIG_PATS`(`claimPattern` がコンボの柄か和柄を選ぶ)
+
+### 次にやること
+- ヌメリン・バチッコの ON/OFF を対戦の設定(`MATCH_ITEMS`)に足す
+- TOUR/DAILY/ZEN/単独盤面、buddy・図鑑、エンディング、BONUS、チュートリアル、ランキング、シェアなどを削る
+- 実績を対戦向けに作り直す
+
 ## 進め方の提案
 1. 保存キーを `nawabari.` に変え、タイトルを NAWABARI にする
 2. オーナーの答えに合わせて、要らないモード・機能を少しずつ削る(削るたびにテスト)
