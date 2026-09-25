@@ -1627,6 +1627,14 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
     const on = cells.filter(c => mixA[c] > 0).length;
     assert('柄: ' + pt + ' がつく(一部だけ白っぽく)', on > 20 && on < cells.length * 0.8, on + '/' + cells.length);
   }
+  for (const pt of BIG_PATS) {
+    applyTeamPattern(cells, pt, cells[0]);
+    const on = cells.filter(c => mixA[c] > 0).length;
+    assert('大きく囲んだときの柄: ' + pt, on > 20 && on < cells.length * 0.8, on + '/' + cells.length);
+  }
+  assert('大きく囲むと和柄(コンボなし)', BIG_PATS.includes(claimPattern(cells, 0, cells[0])) && isBigClaim(cells.length) && !isBigClaim(40));
+  assert('コンボのときはコンボの柄', claimPattern(cells, 2, cells[0]) === 'asanoha');
+  { const a = pickBigPat(), b = pickBigPat(); assert('和柄は続けて同じにならない', a !== b); }
   assert('コンボ1=市松 2=麻の葉 3=フラワーオブライフ', teamPat(1) === 'ichimatsu' && teamPat(2) === 'asanoha' && teamPat(5) === 'flower' && teamPat(0) === null);
   err = null; try { redrawField(); } catch (e) { err = e.stack; } assert('柄の焼き込み', !err, err);
   // 描く音: 試合の外では止まる

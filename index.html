@@ -2506,8 +2506,24 @@ function applyPattern(cells, pat) {
   }
 }
 // チームの柄(対戦モード): コンボが続くと、チームの色のまま柄が出る。1 = 市松 / 2 = 麻の葉 / 3〜 = フラワーオブライフ
-const TEAM_PATS = { ichimatsu: '市松!', asanoha: '麻の葉!', flower: 'フラワー・オブ・ライフ!' };
+// 大きく囲んだとき(コンボの柄がないとき)は和柄のどれか: 青海波・七宝・亀甲・鱗・矢絣・波紋
+const TEAM_PATS = { ichimatsu: '市松!', asanoha: '麻の葉!', flower: 'フラワー・オブ・ライフ!',
+  seigaiha: '青海波!', shippo: '七宝!', kikko: '亀甲!', uroko: '鱗!', yagasuri: '矢絣!', hamon: '波紋!' };
+const BIG_PATS = ['seigaiha', 'shippo', 'kikko', 'uroko', 'yagasuri', 'hamon'];
 function teamPat(c) { return c >= 3 ? 'flower' : c === 2 ? 'asanoha' : c === 1 ? 'ichimatsu' : null; }
+// 大きく囲んだか(盤面の3%以上、かつ150マス以上)
+function isBigClaim(n) { return n >= Math.max(150, initOpen * 0.03); }
+let lastBigPat = null;
+function pickBigPat() {
+  const ks = BIG_PATS.filter(k => k !== lastBigPat);
+  return (lastBigPat = pick(ks));
+}
+// 塗った陣地に柄をつける: コンボならコンボの柄、大きく囲んだら和柄。つけた柄の名前(なければ null)
+function claimPattern(cells, combo, origin) {
+  const tp = cells.length > 20 && teamPat(combo) ? teamPat(combo) : isBigClaim(cells.length) ? pickBigPat() : null;
+  if (tp) applyTeamPattern(cells, tp, origin);
+  return tp;
+}
 function applyTeamPattern(cells, pat, origin) {
   if (!cells.length || !mixA.length || !pat) return;
   const P = surf.pos, o = origin >= 0 ? origin : cells[0], o3 = o * 3;
@@ -2523,7 +2539,7 @@ function applyTeamPattern(cells, pat, origin) {
     if (!a || a < TEAMC_BASE) continue;
     const dx = P[c * 3] - P[o3], dy = P[c * 3 + 1] - P[o3 + 1], dz = P[c * 3 + 2] - P[o3 + 2];
     const u = (dx * U[0] + dy * U[1] + dz * U[2]) / unit / S, v = (dx * V[0] + dy * V[1] + dz * V[2]) / unit / S;
-    let on = false;
+    let on = false, fill = false;                   // on = 白い線(混ぜ5割) / fill = 面でうっすら白く(混ぜ2割)
     if (pat === 'ichimatsu') {                        // 市松: 4マスの正方形の交互
       on = ((Math.floor(u / 6) + Math.floor(v / 6)) & 1) === 1;
     } else if (pat === 'asanoha') {                   // 麻の葉: 0/60/120度の線(間隔13)と、30/90/150度の線(間隔13√3)
@@ -2538,8 +2554,41 @@ function applyTeamPattern(cells, pat, origin) {
         const cx = i * Rr + j * Rr / 2, cy = j * Rr * R3 / 2, d = Math.hypot(u - cx, v - cy);
         if (Math.abs(d - Rr) < 0.5) { on = true; break; }
       }
+    } else if (pat === 'seigaiha') {                  // 青海波: 半円の重なり。下の段が上の段の下半分を隠す
+      const Rr = 11, rowH = Rr / 2, j1 = Math.ceil(v / rowH);
+      for (let j = j1 + 2; j >= j1 - 1; j--) {
+        const cy = j * rowH; if (cy < v) continue;       // 円の上半分だけ見える
+        const off = (j & 1) ? Rr : 0, cx = Math.round((u - off) / (2 * Rr)) * 2 * Rr + off, d = Math.hypot(u - cx, v - cy);
+        if (d >= Rr) continue;
+        on = (d % 2.75) < 0.85 || d > Rr - 0.9;
+        break;
+      }
+    } else if (pat === 'shippo') {                    // 七宝: 正方形に並んだ円が少しずつ重なる
+      const Sp = 14, Rr = Sp / Math.SQRT2, i0 = Math.round(u / Sp), j0 = Math.round(v / Sp);
+      for (let j = j0 - 1; j <= j0 + 1 && !on; j++) for (let i = i0 - 1; i <= i0 + 1; i++)
+        if (Math.abs(Math.hypot(u - i * Sp, v - j * Sp) - Rr) < 0.55) { on = true; break; }
+    } else if (pat === 'kikko') {                     // 亀甲: 六角形(三角格子のいちばん近い点どうしの境目)と、中の小さな六角形
+      const L = 15, h = L * R3 / 2, j0 = Math.round(v / h);
+      let d1 = 1e9, d2 = 1e9;
+      for (let j = j0 - 1; j <= j0 + 1; j++) {
+        const off = (j & 1) ? L / 2 : 0, i0 = Math.round((u - off) / L);
+        for (let i = i0 - 1; i <= i0 + 1; i++) {
+          const d = Math.hypot(u - (i * L + off), v - j * h);
+          if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+        }
+      }
+      on = d2 - d1 < 0.9 || Math.abs((d2 - d1) - L * 0.42) < 0.45;
+    } else if (pat === 'uroko') {                     // 鱗: 三角形を交互に塗る
+      const L = 12, s = u / L - v / (L * R3), t = 2 * v / (L * R3);
+      fill = (s - Math.floor(s)) + (t - Math.floor(t)) < 1;
+    } else if (pat === 'yagasuri') {                  // 矢絣: 列ごとに向きが逆の矢羽根
+      const Wc = 7, col = Math.floor(u / Wc), fu = u / Wc - col - 0.5, k = v / 9 + ((col & 1) ? fu : -fu);
+      fill = k - Math.floor(k) < 0.5;
+    } else if (pat === 'hamon') {                     // 波紋: 囲み終えた場所から広がる輪
+      const d = Math.hypot(u, v);
+      on = d % 7 < 1.3;
     }
-    if (on) { col2A[c] = WHITE_NO; mixA[c] = 5; } else mixA[c] = 0;
+    if (on) { col2A[c] = WHITE_NO; mixA[c] = 5; } else if (fill) { col2A[c] = WHITE_NO; mixA[c] = 2; } else mixA[c] = 0;
   }
 }
 // 1つのセルの色(模様こみ)
@@ -2609,8 +2658,8 @@ function lineCi(c) {
 function lineCiCalc(c) {
   const ns = lineNeighbors(c);
   if (!ns.length) return 3;
-  if (isBoundary(c)) { const mi = mixCi(ns[0], WHITE_NO, 4, 0); return mi >= 0 ? mi : 3; }
-  const mi = mixCi(ns[c % ns.length], WHITE_NO, 1, 0);
+  if (isBoundary(c)) { const mi = mixCi(ns[0], WHITE_NO, 7, 0); return mi >= 0 ? mi : 3; }
+  const mi = mixCi(ns[c % ns.length], WHITE_NO, 6, 0);     // ネオン: 陣地のあいだの線は白っぽく光らせて境目をはっきり
   return mi >= 0 ? mi : 3;
 }
 
@@ -2619,7 +2668,7 @@ const LV = 6;       // 立体面の陰影段階数
 const EARTH_CI0 = 24 + 2 * (13 + 12);  // 地球の色の始まり
 const TEAMC_CI0 = EARTH_CI0 + 16;       // チーム色の始まり
 const NCOL_BASE = TEAMC_CI0 + 8 * 4 + 28 * 2;   // 立体面の固定の色(インク・虹とその暗い版+地球16色+チーム8系統×4+中立28組×2)
-const MIX_SLOTS = 120;                  // 模様・グラデーション用に、その場で作る混ぜ色の枠
+const MIX_SLOTS = 240;                  // 模様・グラデーション用に、その場で作る混ぜ色の枠
 const NCOL = NCOL_BASE + MIX_SLOTS;
 const FLASH_CI = 23; // 塗りの波の光
 let animHue = 0, animAcc = 0, animRedraw = 0; // 動くテーマ用の経過時間
@@ -2819,6 +2868,22 @@ function redrawField() {
   fctx.restore();
   fctx.fillStyle = 'rgba(255,255,255,0.35)'; fctx.fill(gloss);
   if (paths.line) { fctx.fillStyle = t.line; fctx.fill(paths.line); }
+  // ネオン: 陣地のあいだの線の真ん中に白い芯(となりと色が似ていても境目がはっきり見える)
+  const core = new Path2D(), isLine = i => grid[i] === WALL && colA[i] === 0 && !baseA[i];
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const i = idx(x, y);
+    if (!isLine(i)) continue;
+    const cx = x * CS + CS / 2, cy = y * CS + CS / 2;
+    let solo = true;
+    if (x + 1 < GW && isLine(i + 1)) { core.moveTo(cx, cy); core.lineTo(cx + CS, cy); solo = false; }
+    if (y + 1 < GH && isLine(i + GW)) { core.moveTo(cx, cy); core.lineTo(cx, cy + CS); solo = false; }
+    if (solo && !(x > 0 && isLine(i - 1)) && !(y > 0 && isLine(i - GW))) { core.moveTo(cx + CS * 0.2, cy); core.arc(cx, cy, CS * 0.2, 0, Math.PI * 2); }
+  }
+  fctx.save();
+  fctx.lineCap = 'round'; fctx.lineJoin = 'round';
+  fctx.strokeStyle = 'rgba(255,255,255,0.28)'; fctx.lineWidth = CS * 0.62; fctx.stroke(core);
+  fctx.strokeStyle = 'rgba(255,255,255,0.95)'; fctx.lineWidth = Math.max(1, CS * 0.26); fctx.stroke(core);
+  fctx.restore();
 }
 
 // クリア時: 残った空き地を薄く塗って「封鎖」感を出す(判定には影響しない。立体面は描画側で処理)
@@ -3157,10 +3222,9 @@ function closeTrail() {
     Snd.bell(880, 0.08, 0.3); Snd.bell(1320, 0.06, 0.45);
     spawnParticles(P0.x, P0.y, 20, '#9fe3ff');
   }
-  if (isVS() && teamPat(combo) && newCells.length > 20) {                     // ナワバリバトル: コンボで柄(色はチームのまま)
-    const tp = teamPat(combo);
-    applyTeamPattern(newCells, tp, player.c);
-    const P0 = playerScreen(); floats.push({ x: P0.x, y: P0.y - 40, txt: TEAM_PATS[tp], t: 1.4, col: teamHex(0) });
+  if (isVS()) {                                        // ナワバリバトル: コンボか大きく囲むと柄(色はチームのまま)
+    const tp = claimPattern(newCells, combo, player.c);
+    if (tp) { const P0 = playerScreen(); floats.push({ x: P0.x, y: P0.y - 40, txt: TEAM_PATS[tp], t: 1.4, col: teamHex(0) }); }
   }
   if (!inkRainbow() && !earthMode() && !isVS()) {     // ナワバリバトルは、どっちの陣地か分かるよう無地
     applyPattern(newCells, pat);
@@ -4985,8 +5049,8 @@ function rivalClose(r) {
   }
   // コンボ: 続けて囲むと柄が出る
   r.combo = r.comboT > 0 ? r.combo + 1 : 0; r.comboT = CONFIG.COMBO_TIME;
-  const tp = teamPat(r.combo);
-  if (tp && got.length > 20) { applyTeamPattern(got, tp, r.c); const sp = surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS }; floats.push({ x: sp.x, y: sp.y - 30, txt: r.name + ' ' + TEAM_PATS[tp], t: 1.4, col: teamHex(r.team) }); }
+  const tp = claimPattern(got, r.combo, r.c);
+  if (tp) { const sp = surf.is3D ? surf.screenOf(r.c) : { x: r.fx * CS, y: FIELD_Y + r.fy * CS }; floats.push({ x: sp.x, y: sp.y - 30, txt: r.name + ' ' + TEAM_PATS[tp], t: 1.4, col: teamHex(r.team) }); }
   // 囲んだアイテム: 上塗りはそのファイターのもの。ほかは消える
   for (const it of items.filter(it => grid[it.c] !== OPEN)) { items.splice(items.indexOf(it), 1); if (it.k === 'over') fighterOver(r, it); }
   claimed += gained; recountAreas();
@@ -6612,16 +6676,19 @@ function drawInkTrail(t) {
   }
   inkBand(path, col, w);
 }
-// インクの帯(暗いふち + インク + つや)
+// インクの帯(ネオン風): うっすら色の光 + 暗いふち + インク + 真ん中の白い芯。点滅はしない
 function inkBand(path, col, w) {
   ctx.save();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.22; ctx.strokeStyle = col; ctx.lineWidth = w * 2.2; ctx.stroke(path);
+  ctx.globalAlpha = 1;
   ctx.strokeStyle = shade(col, 0.45); ctx.lineWidth = w + 2; ctx.stroke(path);
   ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(path);
-  ctx.translate(-w * 0.18, -w * 0.18);
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = w * 0.22; ctx.stroke(path);
+  ctx.strokeStyle = mixHex(col, '#ffffff', 0.6); ctx.lineWidth = w * 0.5; ctx.stroke(path);   // 芯のまわりのにじみ
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.2, w * 0.24); ctx.stroke(path);     // 白い芯
   ctx.restore();
 }
+function mixHex(a, b, k) { return hexOf(mixRgb(rgbOf(a), rgbOf(b), k)); }
 
 /* ---- 立体面の描画 ----
    毎フレーム: 頂点を投影 → 裏向きのセルを捨てる → 色×陰影ごとにまとめて塗る。
