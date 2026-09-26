@@ -1531,7 +1531,9 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   rings = []; particles = []; floats = [];
   assert('小さく囲んだときは演出なし', claimFx(cells(Math.floor(initOpen * 0.01)), teamHex(0), true) === 0 && rings.length === 0);
   const t3 = claimFx(cells(Math.ceil(initOpen * 0.13)), teamHex(0), true);
-  assert('13%: 「超ナワバリ!」輪6重・しぶき・インクの雨・揺れ', t3 === 3 && rings.length === 6 && particles.filter(q => q.ink).length > 120 && floats.some(f => /超ナワバリ/.test(f.txt)) && (shakeT > 0 || !settings.shake));
+  assert('13%: 「超ナワバリ!」輪6重・しぶき・インクの雨・揺れ・帯・スロー・花火', t3 === 3 && rings.length === 6 && particles.filter(q => q.ink).length > 120 && fxBanner && fxBanner.txt === '超ナワバリ!' && slowMoT > 0 && fwQueue.length === 5 && (shakeT > 0 || !settings.shake));
+  { let err2 = null; try { for (let i = 0; i < 75; i++) { updateFx(1 / 30); if (i % 5 === 0) render(); } } catch (e) { err2 = e.stack; } assert('帯・花火・ズームの描画', !err2 && !fxBanner && fwQueue.length === 0, err2); }
+  zoomPunch = null; slowMoT = 0;
   rings = []; floats = [];
   const tc = claimFx(cells(Math.ceil(initOpen * 0.06)), teamHex(1), false, rivals[0].name);
   assert('CPU は1段低い(6% で段階1)', tc === 1 && rings.length === 2 && floats.some(f => f.txt.includes(rivals[0].name)));

@@ -1316,7 +1316,9 @@ const I18N_EN = {
   "やあ、{name}!": "Hey, {name}!",
   "{name}も来てたの?": "{name}, you're here too?",
   "ヌメリン(クラゲ)": "Numerin (jellyfish)",
-  "バチッコ(火の玉)": "Bachikko (fireball)"
+  "バチッコ(火の玉)": "Bachikko (fireball)",
+  "超ナワバリ!": "MEGA TURF!",
+  "ビッグ!": "BIG!"
 };
 const I18N_RULES = [
   [/ラスト(\d+)秒!/g, 'Last $1 seconds!'],
@@ -1856,6 +1858,19 @@ const Snd = (() => {
       else if (k === 'star') [0, 4, 7, 11, 14].forEach((s2, i) => bell(1046 * Math.pow(2, s2 / 12), 0.04, 0.2 + i * 0.05));
       else if (k === 'life') [0, 7, 12].forEach((s2, i) => tone(784 * Math.pow(2, s2 / 12), 0, 0.14, 'square', 0.08, 0.2 + i * 0.09));
       else if (k === 'over') { splat(0.2, 0.1); tone(220, 880, 0.35, 'sawtooth', 0.06, 0.1); }
+    },
+    // 大きく囲んだときのアルペジオ: BGM のベース音(root)からマイナー・ペンタトニックで駆け上がる
+    fanfare(root, tier) {
+      if (!ac) return;
+      let r = root > 0 ? root : 220;
+      while (r < 330) r *= 2; while (r > 660) r /= 2;
+      const steps = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24], n = [0, 3, 5, 8][tier] || 3, dt = tier >= 3 ? 0.075 : 0.09;
+      steps.slice(0, n).forEach((k, i) => {
+        const f = r * Math.pow(2, k / 12);
+        tone(f, f, 0.22, 'square', 0.035, i * dt);
+        bell(f, 0.05, i * dt);
+      });
+      if (tier >= 2) [0, 7, 12].forEach(k => tone(r / 2 * Math.pow(2, k / 12), r / 2 * Math.pow(2, k / 12), 0.9, 'triangle', 0.05, n * dt));   // 最後に和音
     },
     big()    { [587,740,880,1175].forEach((f,i)=>tone(f,f*1.5,0.12,'sawtooth',0.09,0.25+i*0.05)); },
     death()  {
@@ -3235,7 +3250,7 @@ function initLevel(lv) {
   for (let i = 0; i < surf.N; i++) if (grid[i] === WALL) baseA[i] = 1;
   recountAreas();
 
-  particles = []; floats = [];
+  particles = []; floats = []; fxBanner = null; zoomPunch = null; fwQueue = []; slowMoT = 0;
   if (isVS()) lapseReset();                         // タイムラプスの最初の盤面
   deathTimer = 0; wasSplit = false; shakeT = 0;
   if (autoTheme) applyTheme();   // AUTO: 盤面が変わったら配色(と背景)も
@@ -6202,6 +6217,7 @@ function render() {
 
   ctx.fillStyle = t.field;
   ctx.fillRect(-8, -8, W + 16, H + 16);
+  applyZoomPunch();
   if (surf.is3D) render3D(t);
   else render2D(t);
   drawItems();
@@ -6253,6 +6269,7 @@ function render() {
     ctx.fillText(f.txt, fx, fy);
   }
   ctx.globalAlpha = 1;
+  drawBanner();
 
   renderHUD();
   renderOverlay();
@@ -6283,6 +6300,55 @@ function drawBloom() {
    1: 1.5%〜 輪2重・インクのしぶき・「+x.x%」 / 2: 5%〜「ビッグ!」輪4重・揺れ / 3: 12%〜「超ナワバリ!」輪6重・インクの雨・大きく揺れる
    CPU が囲んだときは1段低く(自分の演出が目立つように) */
 const CLAIM_FX = [1.5, 5, 12];
+let fxBanner = null, slowMoT = 0, zoomPunch = null, fwQueue = [];
+// 帯: チームの色の帯が横からすべり込んで、少し止まって、反対へ抜ける。上に大きな文字
+function drawBanner() {
+  const b = fxBanner;
+  if (!b) return;
+  const t = b.T - b.t, inT = 0.28, outT = 0.32;
+  let off = 0;
+  if (t < inT) { const k = 1 - t / inT; off = -W * k * k; }
+  else if (b.t < outT) { const k = 1 - b.t / outT; off = W * k * k; }
+  const cy = FIELD_Y + (H - FIELD_Y) * 0.4, bh = b.big ? 110 : 84;
+  ctx.save();
+  ctx.translate(off, 0);
+  const g = ctx.createLinearGradient(0, 0, W, 0);
+  g.addColorStop(0, rgbaHex(b.col, 0)); g.addColorStop(0.18, rgbaHex(b.col, 0.62)); g.addColorStop(0.82, rgbaHex(b.col, 0.62)); g.addColorStop(1, rgbaHex(b.col, 0));
+  ctx.fillStyle = 'rgba(4,6,16,0.55)'; ctx.fillRect(0, cy - bh / 2 - 6, W, bh + 12);
+  ctx.fillStyle = g; ctx.fillRect(0, cy - bh / 2, W, bh);
+  ctx.fillStyle = rgbaHex('#ffffff', 0.35); ctx.fillRect(0, cy - bh / 2, W, 2); ctx.fillRect(0, cy + bh / 2 - 2, W, 2);
+  ctx.textAlign = 'center';
+  const fs = b.big ? 54 : 42;
+  ctx.font = "bold " + fs + "px 'Courier New', monospace";
+  ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(4,6,16,0.9)';
+  ctx.strokeText(b.txt, W / 2, cy + fs * 0.18);
+  ctx.fillStyle = '#ffffff'; ctx.fillText(b.txt, W / 2, cy + fs * 0.18);
+  if (b.sub) {
+    ctx.font = "bold 18px 'Courier New', monospace"; ctx.lineWidth = 5;
+    ctx.strokeText(b.sub, W / 2, cy + fs * 0.18 + 30); ctx.fillStyle = '#ffffff'; ctx.fillText(b.sub, W / 2, cy + fs * 0.18 + 30);
+  }
+  ctx.restore();
+}
+function updateFx(dt) {
+  if (fxBanner) { fxBanner.t -= dt; if (fxBanner.t <= 0) fxBanner = null; }
+  if (zoomPunch) { zoomPunch.t -= dt; if (zoomPunch.t <= 0) zoomPunch = null; }
+  for (const f of fwQueue) f.at -= dt;
+  for (const f of fwQueue.filter(f => f.at <= 0)) {
+    for (let i = 0; i < 40; i++) {
+      const a = i / 40 * Math.PI * 2, sp = rand(80, 170);
+      particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: rand(0.8, 1.3), col: i % 3 ? f.col : '#ffffff' });
+    }
+    Snd.fuseCr();
+  }
+  fwQueue = fwQueue.filter(f => f.at > 0);
+}
+// 画面のズーム(平面): 囲んだところへ少し寄って戻る
+function applyZoomPunch() {
+  const z = zoomPunch;
+  if (!z || surf.is3D) return;
+  const k = 1 + z.k * Math.sin(Math.PI * (1 - z.t / z.T));
+  ctx.translate(z.x, z.y); ctx.scale(k, k); ctx.translate(-z.x, -z.y);
+}
 function claimTier(pct) { let k = 0; for (const v of CLAIM_FX) if (pct >= v) k++; return k; }
 function claimFx(cells, col, mine, name) {
   if (!cells.length || !initOpen || state !== 'play') return 0;
@@ -6310,12 +6376,24 @@ function claimFx(cells, col, mine, name) {
   if (tier >= 3) for (let i = 0; i < 70; i++)
     particles.push({ x: rand(10, W - 10), y: FIELD_Y + rand(-30, 30), vx: rand(-15, 15), vy: rand(120, 300), t: rand(1.2, 2.2), col, ink: true, r: rand(2, 4.5) });
   // 文字
-  const txt = (tier >= 3 ? '超ナワバリ!  ' : tier >= 2 ? 'ビッグ!  ' : '') + (mine ? '' : name + ' ') + '+' + pct.toFixed(1) + '%';
-  floats.push({ x: cx, y: cy, txt, t: 1.4 + tier * 0.3, col, size: [0, 22, 30, 40][tier] });
+  const txt = (mine ? '' : name + ' ') + '+' + pct.toFixed(1) + '%';
+  floats.push({ x: cx, y: cy, txt, t: 1.4 + tier * 0.3, col, size: [0, 22, 28, 32][tier] });
   // 揺れ・音
   if (tier >= 2 && settings.shake) shakeT = Math.max(shakeT, tier >= 3 ? 0.45 : 0.22);
-  if (mine) { if (tier >= 3) { Snd.big(); Snd.extend(); buzz(120, 0.9); } else if (tier >= 2) { Snd.big(); buzz(60, 0.5); } }
+  if (mine) { if (tier >= 3) { Snd.big(); buzz(120, 0.9); } else if (tier >= 2) { Snd.big(); buzz(60, 0.5); } }
   else if (tier >= 2) Snd.big();
+  if (mine || tier >= 2) Snd.fanfare(Bgm.root(), tier);   // BGM の調に合わせたアルペジオ
+  // 帯・カメラの寄り(ビッグ以上)
+  if (tier >= 2) {
+    fxBanner = { txt: tier >= 3 ? '超ナワバリ!' : 'ビッグ!', sub: (mine ? '' : name + '  ') + '+' + pct.toFixed(1) + '%', col, t: tier >= 3 ? 2.0 : 1.5, T: tier >= 3 ? 2.0 : 1.5, big: tier >= 3 };
+    if (surf.is3D) cam.D = Math.max(3.0, cam.D - (tier >= 3 ? 0.45 : 0.25));
+    else zoomPunch = { x: cx, y: cy, k: tier >= 3 ? 0.07 : 0.04, t: 0.55, T: 0.55 };
+  }
+  // 超ナワバリ: 一瞬のスローモーションと、チームの色の花火
+  if (tier >= 3) {
+    slowMoT = 0.7;
+    for (let i = 0; i < 5; i++) fwQueue.push({ at: 0.25 + i * 0.22, x: rand(90, W - 90), y: rand(FIELD_Y + 80, H * 0.5), col });
+  }
   return tier;
 }
 
@@ -7161,7 +7239,9 @@ function loop(now) {
   pollPad();
   tickMeta(dt);
   tickTheme(dt);
-  if (state === 'play') update(dt);
+  if (slowMoT > 0) slowMoT -= dt;
+  updateFx(dt);
+  if (state === 'play') update(slowMoT > 0 ? dt * 0.35 : dt);   // 超ナワバリの瞬間は少しだけスロー
   else {
     // タイトル/オプション/READYではQIXがアトラクト的に泳ぐ
     // (ポーズから開いたOPTIONSの間は止めたまま)
