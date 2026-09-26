@@ -1564,5 +1564,28 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   settings.stageSel = 'TOUR';
 }
 
+// ---- 113) 塗れる側の切りかえ(ヌメリンがいるときだけ) ----
+{
+  settings.mode = 'VS'; settings.numerin = 'ON'; settings.bachikko = 'ON'; settings.fillRule = 'SMALL';
+  backToTitle(); onAction(); stTimer = 1;
+  vsSel = VSSET_ITEMS.findIndex(it => it.k === 'fillRule');
+  vsSetKey('ArrowRight'); assert('準備画面: 塗れる側 → ヌメリンのいない側', settings.fillRule === 'QIX');
+  let err = null; try { render(); } catch (e) { err = e.stack; } assert('準備画面の描画(塗れる側)', !err, err);
+  settings.stageSel = 'PLANE'; startGame(); setState('play');
+  const q = qixes[0], qc = surf.qixCell(q), d = bfsDist([qc]);
+  for (let i = 0; i < surf.N; i++) if (d[i] === 4 && grid[i] === OPEN) { grid[i] = WALL; colA[i] = 0; }
+  assert('ヌメリンのいない側: ヌメリンのいる小さな囲いを残す(広いほうが塗れる)', visitedFrom(keepCell())[qc] === 1);
+  settings.fillRule = 'SMALL';
+  assert('狭いほう: 広い空き地を残す', visitedFrom(keepCell())[qc] === 0);
+  settings.fillRule = 'QIX'; settings.numerin = 'OFF';
+  assert('ヌメリンなしなら設定に関係なく狭いほう', !fillByQix());
+  backToTitle(); onAction(); stTimer = 1; vsSel = VSSET_ITEMS.findIndex(it => it.k === 'fillRule');
+  vsSetKey('ArrowRight'); assert('ヌメリンなしのときは切りかえられない', settings.fillRule === 'QIX');
+  openMatchOpts('options'); matchSel = MATCH_ITEMS.findIndex(it => it.k === 'fillRule'); matchAdjust(1);
+  err = null; try { render(); } catch (e) { err = e.stack; }
+  assert('対戦の設定でも切りかえられる', settings.fillRule === 'SMALL' && !err, err);
+  settings.numerin = 'ON'; settings.fillRule = 'SMALL'; settings.stageSel = 'TOUR';
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);

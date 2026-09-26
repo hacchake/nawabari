@@ -700,7 +700,7 @@ const store = (() => {
 
 const settings = Object.assign(
   { bgm: 6, sfx: 7, diff: 'NORMAL', lives: CONFIG.LIVES, theme: THEMES.length, crt: true, mode: 'VS', music: 'AUTO', shake: true, glow: true, ink: 'MIX', claimSnd: 'MIX',
-    vsCpu: 'AUTO', cpuLv: 'AUTO', matchTime: 90, stageSel: 'TOUR', vsRule: 'TIME', vsStock: 3, stageSize: 'AUTO', numerin: 'ON', bachikko: 'ON' },
+    vsCpu: 'AUTO', cpuLv: 'AUTO', matchTime: 90, stageSel: 'TOUR', vsRule: 'TIME', vsStock: 3, stageSize: 'AUTO', numerin: 'ON', bachikko: 'ON', fillRule: 'SMALL' },
   store.get('qlaim.settings', {})
 );
 if (!DIFFS[settings.diff]) settings.diff = 'NORMAL';
@@ -2724,9 +2724,10 @@ function sealRemaining() {
 }
 
 // 囲んだときに「塗らずに残す側」の空き地のマス: いちばん広い空き地(= 狭いほうを塗る)。
-// ナワバリバトルはいつもこれ(ヌメリンを閉じこめても、一度に塗れるのは狭いほうだけ)。ひとり用はヌメリンのいる側を残す
+// ナワバリバトルはふつうこれ(ヌメリンを閉じこめても、一度に塗れるのは狭いほうだけ)。
+// 設定「塗れる側」が「ヌメリンのいない側」(fillRule = 'QIX')なら、ひとり用と同じくヌメリンのいる側を残す
 function keepCell() {
-  if (qixes.length && !isVS()) return openNear(surf.qixCell(qixes[0]));
+  if (qixes.length && (!isVS() || fillByQix())) return openNear(surf.qixCell(qixes[0]));
   const N = surf.N, nb = surf.nb, seen = new Uint8Array(N), q = new Int32Array(N);
   let best = -1, bestN = 0;
   for (let s0 = 0; s0 < N; s0++) {
@@ -2769,6 +2770,9 @@ function qixPlaceAt(q, c) {
   else { q.x = (c % GW) + 0.5; q.y = ((c / GW) | 0) + 0.5; }                            // 平面
   q.segs = []; q.segT = 0; q.dash = 0;
 }
+// 塗れる側: 'SMALL' = 狭いほう / 'QIX' = ヌメリンのいない側(ヌメリンを閉じこめれば広いほうも取れる)。ヌメリンがいるときだけ効く
+function fillByQix() { return settings.fillRule === 'QIX' && settings.numerin !== 'OFF'; }
+const FILL_LABEL = { SMALL: '狭いほう', QIX: 'ヌメリンのいない側' };
 // ナワバリバトルの邪魔役: 対戦の設定で ON / OFF(タイトルの背景にはいつも出す)
 function numerinOn() { return !hasRivals() || state === 'title' || settings.numerin !== 'OFF'; }
 function bachikkoOn() { return !hasRivals() || settings.bachikko !== 'OFF'; }
@@ -3685,6 +3689,7 @@ const MATCH_ITEMS = [
   { k:'stageSize', label:'ステージの広さ', vals:['AUTO', 'S', 'M', 'L', 'XL'] },
   { k:'numerin',   label:'ヌメリン(クラゲ)', vals:['ON', 'OFF'] },
   { k:'bachikko',  label:'バチッコ(火の玉)', vals:['ON', 'OFF'] },
+  { k:'fillRule',  label:'塗れる側',       vals:['SMALL', 'QIX'] },
   { k:'_keys',     label:'キーコンフィグ' },
   { k:'_back',     label:'もどる' },
 ];
@@ -3718,6 +3723,7 @@ function drawMatchOpts(t) {
     else if (it.k === 'vsRule') v = settings.vsRule === 'STOCK' ? '残機制' : '時間制';
     else if (it.k === 'stageSize') v = stageSizeLabel(settings.stageSize || 'AUTO');
     else if (it.k === 'vsStock') v = vsStock() + '機';
+    else if (it.k === 'fillRule') v = FILL_LABEL[settings.fillRule] || '狭いほう';
     else if (it.vals) v = String(settings[it.k]);
     if (v) ctx.fillText('◀ ' + v + ' ▶', W - 110, y + 2);
   });
@@ -3785,6 +3791,7 @@ const VSSET_ITEMS = [
   { k:'vsCpu',    label:'CPUの数' },
   { k:'cpuLv',    label:'CPUの強さ' },
   { k:'_enemy',   label:'じゃま役' },                // ヌメリン・バチッコの ON / OFF
+  { k:'fillRule', label:'塗れる側' },                // ヌメリンがいるときだけ: 狭いほう / ヌメリンのいない側
   { k:'_start',   label:'スタート' },
 ];
 let vsSel = VSSET_ITEMS.length - 1, vsRects = [];
@@ -3801,6 +3808,7 @@ function vsSetDo(i, dir) {
   else if (it.k === '_amount') { if (settings.vsRule === 'STOCK') cyc('vsStock', [1, 2, 3, 4, 5]); else cyc('matchTime', MATCH_TIMES); }
   else if (it.k === 'vsCpu') cyc('vsCpu', ['AUTO', '1', '2', '3', '4', '5', '6', '7']);
   else if (it.k === 'cpuLv') cyc('cpuLv', ['AUTO'].concat(CPU_LV));
+  else if (it.k === 'fillRule') { if (settings.numerin === 'OFF') return; cyc('fillRule', ['SMALL', 'QIX']); }
   else if (it.k === '_enemy') { const e = ENEMY_SETS[(enemySetIdx() + dir + ENEMY_SETS.length) % ENEMY_SETS.length]; settings.numerin = e[0]; settings.bachikko = e[1]; }
   Snd.blip(); saveSettings();
 }
@@ -3812,7 +3820,7 @@ function drawVsSetup(t) {
   ctx.fillText('全員敵同士。いちばん広い陣地を取れ!', W / 2, 190);
   vsRects = [];
   VSSET_ITEMS.forEach((it, i) => {
-    const y = 236 + i * 60, sel = i === vsSel;
+    const y = 232 + i * 54, sel = i === vsSel;
     if (it.k === '_start') {
       vsRects.push({ x: W / 2 - 130, y: y - 30, w: 260, h: 52, i });
       ctx.fillStyle = sel ? '#ffd76b' : '#8a7a3a'; ctx.fillRect(W / 2 - 130, y - 30, 260, 52);
@@ -3829,7 +3837,11 @@ function drawVsSetup(t) {
     else if (it.k === 'vsRule') { v = settings.vsRule === 'STOCK' ? '残機制' : '時間制'; sub = settings.vsRule === 'STOCK' ? '時間なし。残機がなくなると脱落。最後まで残れ!' : '時間切れのとき、いちばん広い人の勝ち'; }
     else if (it.k === '_amount') { if (settings.vsRule === 'STOCK') { label = '残機'; v = vsStock() + '機'; sub = 'CPUも同じ数'; } else { label = '試合時間'; v = matchTime() + '秒'; } }
     else if (it.k === 'vsCpu') { v = settings.vsCpu === 'AUTO' ? 'AUTO' : settings.vsCpu + '人'; sub = settings.vsCpu === 'AUTO' ? '3人から、2ラウンドごとに1人ずつ増える(7人まで)' : ''; }
-    else if (it.k === '_enemy') { v = ENEMY_SETS[enemySetIdx()][2]; sub = 'ヌメリン(クラゲ)とバチッコ(火の玉)。いないと、囲んだとき狭いほうが塗れる'; }
+    else if (it.k === 'fillRule') {
+      if (settings.numerin === 'OFF') { v = '狭いほう'; sub = 'ヌメリンがいないときは、いつも狭いほう'; }
+      else { v = FILL_LABEL[settings.fillRule] || '狭いほう'; sub = settings.fillRule === 'QIX' ? 'ヌメリンを小さく閉じこめれば、広いほうを一気に取れる' : '囲むと狭いほうが塗れる(一発決着なし)'; }
+    }
+    else if (it.k === '_enemy') { v = ENEMY_SETS[enemySetIdx()][2]; sub = 'ヌメリン(クラゲ)とバチッコ(火の玉)を出すか'; }
     else if (it.k === 'cpuLv') { v = settings.cpuLv === 'AUTO' ? 'AUTO' : settings.cpuLv; sub = settings.cpuLv === 'AUTO' ? 'ラウンドが進むほど強くなる' : settings.cpuLv === '悪魔' ? 'これ以上ない強さ' : ''; }
     ctx.textAlign = 'left'; ctx.fillStyle = sel ? '#ffffff' : '#cdd8ff'; ctx.font = "bold 18px 'Courier New', monospace";
     ctx.fillText(label, 100, y - (sub ? 4 : -4));
