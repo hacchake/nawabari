@@ -368,7 +368,7 @@ for (let i = 0; i < 4; i++) stepK(0); for (let i = 0; i < 3; i++) stepK(1); for 
   settings.music = 'AUTO'; settings.mode = 'KLEIN'; initLevel(1);
   assert('AUTOは盤面ごとの曲(クラインの壺=drone)', bgmName() === 'drone');
   optSel = OPT_ITEMS.findIndex(o => o.k === 'music'); adjustOpt(1);
-  assert('OPTIONSでBGMを切替', settings.music === 'SPLASH', settings.music);
+  assert('OPTIONSでBGMを切替', settings.music === MUSIC_KEYS[1], settings.music);
   settings.music = 'AUTO';
 }
 
@@ -1605,6 +1605,29 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   let err = null; try { for (const st of ['title', 'options', 'help', 'vssetup', 'matchopts', 'achv', 'stats']) { setState(st); render(); } } catch (e) { err = e.stack; }
   assert('英語で各画面を描ける', !err, err);
   settings.lang = 'JA';
+}
+
+// ---- 115) 曲の調・描く音を曲に合わせる・新しい曲 ----
+{
+  const PCN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const keyName = n => { const k = Bgm._songKey(BGMDATA[n]); return PCN[k.pc] + (k.minor ? 'm' : ''); };
+  const want = { play: 'Am', orbit: 'Dm', chip: 'Em', synth: 'Am', splash: 'Em', idm: 'F#m', battle: 'Dm', neon: 'F', matsuri: 'Dm', title: 'Am' };
+  const bad = Object.keys(want).filter(n => keyName(n) !== want[n]).map(n => n + '=' + keyName(n));
+  assert('曲の調の判定(長調・短調)', bad.length === 0, bad.join(' '));
+  assert('新しい曲: バトル・ネオン・まつり', ['battle', 'neon', 'matsuri'].every(n => BGMDATA[n] && BGMDATA[n].tracks.every(tr => tr.t !== 'n' || tr.s.length === BGMDATA[n].len) && MUSIC_SONG[n.toUpperCase()] === n && SONG_LABEL[n]));
+  assert('盤面に新しい曲', CONFIG.SURF.TETRA.music === 'battle' && CONFIG.SURF.OCTA.music === 'neon' && CONFIG.SURF.DODECA.music === 'matsuri');
+  // 描く音の和音: バトル(D マイナー)の主音の上 = D・F・A
+  Bgm._load('battle');
+  const pcs = [0, 1, 2].map(r => PCN[Snd._pcOfHz(Snd._voiceHz(r, 0))]).join(',');
+  assert('描く音の和音は調の中(D マイナーなら D・F・A)', pcs === 'D,F,A', pcs);
+  // 伸びても調の外の音は出ない(どの曲でも)
+  let out = [];
+  for (const n of Object.keys(BGMDATA)) {
+    Bgm._load(n); const K = Bgm.key();
+    for (let r = 0; r < 3; r++) for (let len = 0; len < 60; len += 4) { const pc = Snd._pcOfHz(Snd._voiceHz(r, len)); if (!K.scale.includes((pc - K.pc + 12) % 12)) out.push(n + ':' + PCN[pc]); }
+  }
+  assert('どの曲でも描く音は調の音だけ', out.length === 0, out.slice(0, 5).join(' '));
+  Bgm.stop();
 }
 
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');

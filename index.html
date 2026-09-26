@@ -198,9 +198,9 @@ const CONFIG = {
                    sparx:1.00, sparxStart:2, sparxWait:0, music:'splash' },
     CUBE:        s3({ label:'立方体',       sub:'正多面体',           shape:'cube',        music:'chip' }),
     SPHERE:      s3({ label:'球',           sub:'まんまるの球', shape:'sphere',   music:'earth' }),
-    TETRA:       s3({ label:'正四面体',     sub:'正多面体',           shape:'tetra',       music:'chip', target:68 }),
-    OCTA:        s3({ label:'正八面体',     sub:'正多面体',           shape:'octa',        music:'ambient' }),
-    DODECA:      s3({ label:'正12面体',     sub:'正多面体',           shape:'dodeca',      music:'ambient' }),
+    TETRA:       s3({ label:'正四面体',     sub:'正多面体',           shape:'tetra',       music:'battle', target:68 }),
+    OCTA:        s3({ label:'正八面体',     sub:'正多面体',           shape:'octa',        music:'neon' }),
+    DODECA:      s3({ label:'正12面体',     sub:'正多面体',           shape:'dodeca',      music:'matsuri' }),
     ICOSA:       s3({ label:'正20面体',     sub:'正多面体',           shape:'icosa',       music:'orbit' }),
     TRUNC_TETRA: s3({ label:'切頂四面体',   sub:'切頂正多面体',       shape:'truncTetra',  music:'chip' }),
     TRUNC_CUBE:  s3({ label:'切頂六面体',   sub:'切頂正多面体',       shape:'truncCube',   music:'idm' }),
@@ -305,11 +305,11 @@ function modeSub(m) {
 const CLAIM_SND_OPTS = ['MIX', 'CLASSIC', 'ARPEGGIO', 'SHEPARD', 'HARP', 'BELL', 'STAB'];
 const CLAIM_SND_KEYS = { CLASSIC:'classic', ARPEGGIO:'arp', SHEPARD:'shepard', HARP:'harp', BELL:'bell', STAB:'stab' };
 /* ---- BGMの選び方(OPTIONS)。AUTO は盤面ごとの music ---- */
-const MUSIC_KEYS = ['AUTO', 'SPLASH', 'CLASSIC', 'ORBIT', 'EARTH', 'CHIP', 'DRONE', 'AMBIENT', 'IDM', 'SYNTH', 'LOFI'];
+const MUSIC_KEYS = ['AUTO', 'BATTLE', 'NEON', 'MATSURI', 'SPLASH', 'CLASSIC', 'ORBIT', 'EARTH', 'CHIP', 'DRONE', 'AMBIENT', 'IDM', 'SYNTH', 'LOFI'];
 // 曲の表示名(READY 画面の「♪」)
-const SONG_LABEL = { splash:'スプラッシュ(ファンク)', play:'クラシック', orbit:'宇宙', chip:'チップチューン', drone:'ドローン', ambient:'アンビエント',
+const SONG_LABEL = { battle:'バトル', neon:'ネオン', matsuri:'まつり', splash:'スプラッシュ(ファンク)', play:'クラシック', orbit:'宇宙', chip:'チップチューン', drone:'ドローン', ambient:'アンビエント',
                      idm:'IDM', synth:'シンセウェイブ', lofi:'ローファイ', title:'タイトル', earth:'アース' };
-const MUSIC_SONG = { SPLASH:'splash', CLASSIC:'play', ORBIT:'orbit', EARTH:'earth', CHIP:'chip', DRONE:'drone', AMBIENT:'ambient', IDM:'idm',
+const MUSIC_SONG = { BATTLE:'battle', NEON:'neon', MATSURI:'matsuri', SPLASH:'splash', CLASSIC:'play', ORBIT:'orbit', EARTH:'earth', CHIP:'chip', DRONE:'drone', AMBIENT:'ambient', IDM:'idm',
                      SYNTH:'synth', LOFI:'lofi' };
 
 /* ---- 配色テーマ ----
@@ -392,6 +392,51 @@ function arp(chords, pat) {
   return chords.flatMap(ch => pat.map(k => k == null ? null : ch[k]));
 }
 const BGMDATA = {
+  // バトル: 対戦の疾走感。D マイナー Dm → B♭ → F → C、4つ打ち
+  battle: { bpm: 140, len: 64, key: 'D', minor: true,
+    form: [ { n:1, drums:false, mute:[5] }, { n:2 }, { n:2, alt:true, boost:1 }, { n:1, drums:false, mute:[0], boost:2 }, { n:2, alt:true, boost:1 }, { n:1, t:2, boost:1 } ],
+    tracks: [
+    { t:'n', w:'sawtooth', v:0.052, g:0.6, det:6, flt:[2400,380,7], l:0, s:['D2',null,'D2',null,'D3',null,'D2',null,'D2',null,'D3',null,'D2',null,'D3',null,'A#1',null,'A#1',null,'A#2',null,'A#1',null,'A#1',null,'A#2',null,'A#1',null,'A#2',null,'F2',null,'F2',null,'F3',null,'F2',null,'F2',null,'F3',null,'F2',null,'F3',null,'C2',null,'C2',null,'C3',null,'C2',null,'C2',null,'C3',null,'C2',null,'C3',null] },
+    { t:'n', w:'square',   v:0.028, g:0.45, pn:0.3, l:0, s:['D4',null,'F4',null,'A4',null,'D5',null,'A4',null,'F4',null,'D5',null,'A4',null,'A#3',null,'D4',null,'F4',null,'A#4',null,'F4',null,'D4',null,'A#4',null,'F4',null,'F4',null,'A4',null,'C5',null,'F5',null,'C5',null,'A4',null,'F5',null,'C5',null,'C4',null,'E4',null,'G4',null,'C5',null,'G4',null,'E4',null,'C5',null,'G4',null] },
+    { t:'n', w:'triangle', v:0.024, g:15, a:0.4, r:1.0, det:10, l:0, s:['A3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'A#3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'A3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'G3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+    { t:'n', w:'triangle', v:0.024, g:15, a:0.4, r:1.0, det:10, l:0, s:['D4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'D4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'C4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'C4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+    { t:'n', w:'triangle', v:0.022, g:15, a:0.4, r:1.0, det:10, l:0, s:['F4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'F4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'F4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'E4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+    { t:'n', w:'sawtooth', v:0.040, g:1.6, det:5, echo:1, ed:3, l:1, vib:[5.5, 12], s:['A4',null,'D5',null,'F5',null,'E5','D5',null,null,'C5',null,'A4',null,null,null,'A#4',null,'D5',null,'F5',null,'A5',null,'G5',null,'F5',null,'D5',null,null,null,'C5',null,'F5',null,'A5',null,'G5','F5',null,null,'E5',null,'C5',null,null,null,'E5',null,'G5',null,'C6',null,'A#5',null,'A5',null,'G5',null,'E5',null,'C5',null], s2:['D5',null,null,'F5',null,null,'A5',null,'G5',null,'F5',null,'E5',null,'D5',null,'D5',null,null,'F5',null,null,'A#5',null,'A5',null,'G5',null,'F5',null,null,null,'F5',null,null,'A5',null,null,'C6',null,'A#5',null,'A5',null,'G5',null,null,null,'G5',null,null,'E5',null,null,'C5',null,'D5',null,'E5',null,'G5',null,'E5',null] },
+    { t:'kick',  v:0.55, l:0, p:[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] },
+    { t:'snare', v:0.26, l:0, p:[4, 12, 20, 28, 36, 44, 52, 60] },
+    { t:'hat',   v:0.07, l:0, p:[2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62] },
+    { t:'ohat',  v:0.06, l:1, p:[14,30,46,62] },
+    { t:'hat',   v:0.03, l:2, p:[1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] },
+  ]},
+  // ネオン: フューチャーファンク。F メジャー B♭maj7 → Am7 → Dm7 → C。裏拍のコードの刻み
+  neon: { bpm: 116, len: 64, swing: 0.06, key: 'F',
+    form: [ { n:1, mute:[4] }, { n:2 }, { n:2, alt:true, boost:1 }, { n:1, drums:false, boost:2 }, { n:2, boost:1 }, { n:1, alt:true, t:1, boost:1 } ],
+    tracks: [
+    { t:'n', w:'square',   v:0.070, g:0.5, flt:[2200,300,8], rv:0.04, l:0, s:['A#1',null,null,'A#1',null,'A#2',null,'A#1',null,null,'A#1',null,'A#2',null,'A#1',null,'A1',null,null,'A1',null,'A2',null,'A1',null,null,'A1',null,'A2',null,'A1',null,'D2',null,null,'D2',null,'D3',null,'D2',null,null,'D2',null,'D3',null,'D2',null,'C2',null,null,'C2',null,'C3',null,'C2',null,null,'C2',null,'C3',null,'C2',null] },
+    { t:'n', w:'sawtooth', v:0.022, g:0.6, det:9, pn:-0.3, rv:0.2, l:0, s:[null,null,'D4',null,null,null,'D4',null,null,null,'D4',null,null,null,'D4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null,null,null,'C4',null] },
+    { t:'n', w:'sawtooth', v:0.022, g:0.6, det:9, rv:0.2, l:0, s:[null,null,'F4',null,null,null,'F4',null,null,null,'F4',null,null,null,'F4',null,null,null,'E4',null,null,null,'E4',null,null,null,'E4',null,null,null,'E4',null,null,null,'F4',null,null,null,'F4',null,null,null,'F4',null,null,null,'F4',null,null,null,'E4',null,null,null,'E4',null,null,null,'E4',null,null,null,'E4',null] },
+    { t:'n', w:'sawtooth', v:0.022, g:0.6, det:9, pn:0.3, rv:0.2, l:0, s:[null,null,'A4',null,null,null,'A4',null,null,null,'A4',null,null,null,'A4',null,null,null,'G4',null,null,null,'G4',null,null,null,'G4',null,null,null,'G4',null,null,null,'A4',null,null,null,'A4',null,null,null,'A4',null,null,null,'A4',null,null,null,'G4',null,null,null,'G4',null,null,null,'G4',null,null,null,'G4',null] },
+    { t:'n', w:'square',   v:0.040, g:1.2, vib:[5.5, 12], echo:1, ed:3, rv:0.3, l:1, s:['F5',null,'G5',null,'A5',null,null,'C6',null,'A5',null,'G5','F5',null,null,null,'E5',null,'G5',null,'A5',null,'C6',null,'A5',null,'G5',null,'E5',null,null,null,'F5',null,'A5',null,'D6',null,'C6','A5',null,null,'G5',null,'F5',null,'D5',null,'E5',null,'G5',null,'C6',null,null,null,'A#5',null,'A5',null,'G5',null,null,null], s2:['D6',null,'C6',null,'A5',null,'F5',null,'G5',null,null,null,'A5',null,null,null,'C6',null,'A5',null,'G5',null,'E5',null,'D5',null,'E5',null,'G5',null,null,null,'A5',null,null,'F5',null,null,'D5',null,'F5',null,'A5',null,'C6',null,null,null,'A#5',null,'A5',null,'G5',null,'E5',null,'C5',null,null,null,null,null,null,null] },
+    { t:'kick',  v:0.55, l:0, p:[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60] },
+    { t:'clap',  v:0.28, l:0, p:[4, 12, 20, 28, 36, 44, 52, 60] },
+    { t:'hat',   v:0.06, l:0, p:[2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62] },
+    { t:'ohat',  v:0.05, l:1, p:[14,30,46,62] },
+    { t:'hat',   v:0.028, l:2, pr:0.8, p:[1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63] },
+  ]},
+  // まつり: D の都節(D・E♭・G・A・B♭)。三味線風の刻み・笛・和太鼓
+  matsuri: { bpm: 132, len: 64, key: 'D', minor: true, scale: [0, 1, 5, 7, 8],
+    form: [ { n:1, drums:false, mute:[2] }, { n:2 }, { n:2, alt:true, boost:1 }, { n:1, mute:[1], boost:2 }, { n:2, alt:true, boost:1 } ],
+    tracks: [
+    { t:'n', w:'triangle', v:0.060, g:15, a:0.05, r:0.8, l:0, s:['D2',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'D2',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'G2',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'A2',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+    { t:'n', w:'square',   v:0.030, g:0.3, r:0.15, pn:-0.25, l:0, s:['D4',null,'A4',null,'D5',null,'A4',null,'D4',null,'A4',null,'D5',null,'A4',null,'D4',null,'A4',null,'D5',null,'A4',null,'D4',null,'A4',null,'D5',null,'A4',null,'G4',null,'D5',null,'G5',null,'D5',null,'G4',null,'D5',null,'G5',null,'D5',null,'D4',null,'A4',null,'D5',null,'A4',null,'D4',null,'A4',null,'D5',null,'A4',null] },
+    { t:'n', w:'sine',     v:0.070, g:1.8, a:0.03, r:0.3, vib:[5, 18], echo:1, ed:3, pn:0.15, l:0, s:['D5',null,null,'D#5','G5',null,'A5',null,'A#5',null,'A5','G5',null,null,'D#5',null,'D5',null,null,null,'A4',null,'A#4',null,'D5',null,null,null,null,null,null,null,'G5',null,'A5',null,'A#5',null,'D6',null,'A#5',null,'A5',null,'G5',null,null,null,'A5',null,'G5',null,'D#5',null,'D5',null,'D5',null,null,null,null,null,null,null], s2:['A5',null,'A#5',null,'A5',null,'G5',null,'D#5',null,'D5',null,null,null,null,null,'G5',null,'A5',null,'D6',null,null,null,'A#5',null,'A5',null,'G5',null,null,null,'D6',null,null,'A#5','A5',null,'G5',null,'A5',null,'G5','D#5',null,null,'D5',null,'D5',null,'D#5',null,'G5',null,'A5',null,'D5',null,null,null,null,null,null,null] },
+    { t:'n', w:'triangle', v:0.022, g:15, a:0.6, r:1.2, l:1, s:['A3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'A3',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'D4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,'D#4',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+    { t:'kick',  v:0.60, l:0, p:[0,6,16,22,32,38,48,54,60] },
+    { t:'tom',   v:0.40, f:110, l:0, p:[8,12,24,28,40,44,56] },
+    { t:'snare', v:0.10, l:1, p:[2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62] },
+    { t:'hat',   v:0.05, l:0, p:[4, 12, 20, 28, 36, 44, 52, 60] },
+    { t:'tom',   v:0.28, f:180, l:2, p:[14,15,30,31,46,47,62,63] },
+  ]},
   title: { bpm: 92, len: 16, fixed: 1,
     // Am → F を4回、別の分散和音で2回、全音下(Gm → E♭)で2回、ドラムなしで静かに2回
     form: [ { n:4 }, { n:2, alt:true }, { n:2, t:-2 }, { n:2, alt:true, drums:false, mute:[2] } ],
@@ -1318,7 +1363,10 @@ const I18N_EN = {
   "ヌメリン(クラゲ)": "Numerin (jellyfish)",
   "バチッコ(火の玉)": "Bachikko (fireball)",
   "超ナワバリ!": "MEGA TURF!",
-  "ビッグ!": "BIG!"
+  "ビッグ!": "BIG!",
+  "バトル": "Battle",
+  "ネオン": "Neon",
+  "まつり": "Matsuri"
 };
 const I18N_RULES = [
   [/ラスト(\d+)秒!/g, 'Last $1 seconds!'],
@@ -1681,9 +1729,11 @@ const Snd = (() => {
   function startDraw(slow) {
     if (!ac) return;
     stopDraw();
-    let b = Bgm.root() || 110;
-    while (b < 40) b *= 2; while (b >= 80) b /= 2;         // いちばん下の音(40〜80Hz)
-    humBase = slow ? b : b * Math.pow(2, 7 / 12); humStep = -1;
+    const K = Bgm.key();
+    let b = pcHz(K.pc);
+    while (b < 40) b *= 2; while (b >= 80) b /= 2;         // いちばん下の音(40〜80Hz)= 調の主音
+    humScale = K.scale.length === 5 ? K.scale : K.minor ? [0, 3, 5, 7, 10] : [0, 2, 4, 7, 9];
+    humBase = b; humStart = slow ? 0 : 3; humStep = -1;       // 速いときは5度の上から
     const t = ac.currentTime;
     humOut = ac.createGain();
     humOut.gain.setValueAtTime(0.0001, t); humOut.gain.exponentialRampToValueAtTime(0.05, t + 0.05);
@@ -1697,14 +1747,14 @@ const Snd = (() => {
       humOs.push(o); humGs.push(g);
     }
   }
-  const HUM_SCALE = [0, 2, 4, 7, 9];
+  let humScale = [0, 2, 4, 7, 9], humStart = 0;
   function updateDraw(len, slow) {
     if (!humOs.length) return;
-    const st = Math.floor(len / 4);                         // 上限なし(無限音階)
+    const st = Math.floor(len / 4) + humStart;              // 上限なし(無限音階)
     if (st === humStep) return;
-    const wrap = humStep >= 0 && Math.floor(st / 5) !== Math.floor(humStep / 5);
+    const L = humScale.length, wrap = humStep >= 0 && Math.floor(st / L) !== Math.floor(humStep / L);
     humStep = st;
-    const frac = HUM_SCALE[st % 5] / 12, t = ac.currentTime;
+    const frac = humScale[st % L] / 12, t = onGrid();          // 音程が変わるのは16分音符の頭
     for (let k = 0; k < HUM_N; k++) {
       const f = humBase * Math.pow(2, k + frac);
       // 1オクターブ回ったとき(frac が 0 に戻る)は、すべらせずに切り替える(聞こえ方は変わらない)
@@ -1723,11 +1773,23 @@ const Snd = (() => {
   const voices = new Map();
   const VOICE_CH = [0, 4, 7];
   function voiceHz(role, len) {
-    let b = Bgm.root() || 165;
+    const K = Bgm.key(), sc = K.scale, L = sc.length;
+    let b = Bgm.root() || pcHz(K.pc);
     while (b < 130) b *= 2; while (b >= 260) b /= 2;            // 低めの音域から
+    // ベース音を調の音にそろえ(調にない音なら、すぐ下の調の音へ)、そこから調の中で3度ずつ積んだ和音
+    const rel = (pcOfHz(b) - K.pc + 12) % 12;
+    let i = 0; for (let j = 0; j < L; j++) if (sc[j] <= rel) i = j;
+    b *= Math.pow(2, (sc[i] - rel) / 12);
+    const deg = n => sc[(i + n) % L] + 12 * Math.floor((i + n) / L) - sc[i];
+    const chord = [0, deg(2), deg(4)];
     const st = role % 3 + Math.min(4, Math.floor(len / 8));        // 上がりすぎない(キンキンしない)
-    return b * Math.pow(2, (VOICE_CH[st % 3] + 12 * Math.floor(st / 3)) / 12);
+    return b * Math.pow(2, (chord[st % 3] + 12 * Math.floor(st / 3)) / 12);
   }
+  // 音名の番号(C=0)⇔ 周波数
+  function pcOfHz(f) { return ((Math.round(12 * Math.log2(f / 440)) + 9) % 12 + 12) % 12; }
+  function pcHz(pc) { return 440 * Math.pow(2, (pc - 9 - 12) / 12); }   // 3オクターブ目あたり
+  // 音程を変える時刻: 次の16分音符(曲が止まっていれば今すぐ)
+  function onGrid() { return Math.max(ac.currentTime, Bgm.gridT()); }
   function voiceStart(id, role, pan) {
     if (!ac || voices.has(id) || voices.size >= 6) return;       // 重ならないよう同時に6つまで
     const t = ac.currentTime, g = ac.createGain(), o1 = ac.createOscillator(), o2 = ac.createOscillator(), lp = ac.createBiquadFilter();
@@ -1744,7 +1806,7 @@ const Snd = (() => {
     const v = voices.get(id);
     if (!v) return;
     const f = voiceHz(v.role, len), t = ac.currentTime;
-    if (Math.abs(f - v.f) > 0.5) { v.f = f; v.o1.frequency.setTargetAtTime(f, t, 0.03); v.o2.frequency.setTargetAtTime(f * 2, t, 0.03); }
+    if (Math.abs(f - v.f) > 0.5) { v.f = f; const tg = onGrid(); v.o1.frequency.setTargetAtTime(f, tg, 0.012); v.o2.frequency.setTargetAtTime(f * 2, tg, 0.012); }
     if (v.pn) v.pn.pan.setTargetAtTime(clamp(pan || 0, -1, 1), t, 0.05);
   }
   function voiceStop(id) {
@@ -1824,7 +1886,7 @@ const Snd = (() => {
   return {
     ensure, applyVols, toggleMute, stopDraw, startDraw, updateDraw, react, sweep,
     note, kick, hat, snare, blipDrum, ohat, crash, tom, clap, setTempo, duck, bell, splat, pickClaimSnd,
-    voiceStart, voiceUpdate, voiceStop, voiceStopAll, get voiceCount() { return voices.size; },
+    voiceStart, voiceUpdate, voiceStop, voiceStopAll, get voiceCount() { return voices.size; }, _voiceHz: voiceHz, _pcOfHz: pcOfHz,
     get claimVoices() { return Object.keys(CLAIM_VOICES); },
     get ac() { return ac; },
     claim(cells, slow, pat) {
@@ -1903,6 +1965,33 @@ const Bgm = (() => {
   let step = 0, nextT = 0, timer = null;
   let formIdx = 0, formRep = 0;          // いまのセクション / その中で何回目か
   const kickTimes = [];                  // キックを鳴らす予定の時刻(画面の脈動用)
+  // 曲の調: 音符の出てくる回数(長さつき)から、いちばん合う長調・短調を選ぶ(主和音の音を少し重く見る)
+  const NOTE_PC = { C:0, 'C#':1, D:2, 'D#':3, E:4, F:5, 'F#':6, G:7, 'G#':8, A:9, 'A#':10, B:11 };
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11], MINOR = [0, 2, 3, 5, 7, 8, 10];
+  function songKey(sg) {
+    if (sg._key) return sg._key;
+    let k;
+    if (sg.key) k = { pc: NOTE_PC[sg.key], minor: !!sg.minor, scale: sg.scale || (sg.minor ? MINOR : MAJOR) };
+    else {
+      const h = new Array(12).fill(0);
+      for (const tr of sg.tracks) if (tr.t === 'n') for (const seq of [tr.s, tr.s2]) if (seq) for (const nm of seq) {
+        const m = nm && /^([A-G]#?)/.exec(nm);
+        if (m) h[NOTE_PC[m[1]]] += tr.g || 1;
+      }
+      // 最初のベース音(いちばん上のトラックの最初の音)は主音のことが多いので重く見る
+      const b0 = sg.tracks.find(tr => tr.t === 'n'), n0 = b0 && b0.s.find(x => x), m0 = n0 && /^([A-G]#?)/.exec(n0);
+      const tot = h.reduce((a, v) => a + v, 0);
+      if (m0) h[NOTE_PC[m0[1]]] += tot * 0.15;
+      let bs = -1;
+      for (let pc = 0; pc < 12; pc++) for (const minor of [false, true]) {
+        const sc = minor ? MINOR : MAJOR;
+        let s = 0; for (const d of sc) s += h[(pc + d) % 12];
+        s += h[pc] * 0.5 + h[(pc + (minor ? 3 : 4)) % 12] * 0.25 + h[(pc + 7) % 12] * 0.25;
+        if (s > bs) { bs = s; k = { pc, minor, scale: sc }; }
+      }
+    }
+    return (sg._key = k);
+  }
   // クライマックス(決着前の10秒): 小節の頭で全音上に転調(Am → Bm)・テンポ1割増し・全パート
   let climaxWant = false, climaxOn = false;
   const CLIMAX_UP = Math.pow(2, 2 / 12), CLIMAX_BPM = 1.1;
@@ -2038,6 +2127,15 @@ const Bgm = (() => {
     get climax() { return climaxWant; },
     set climax(v) { climaxWant = !!v; if (!v) climaxOn = false; },
     get climaxOn() { return climaxOn; },
+    // いまの調(移調・盛り上げの転調こみ): { pc: 主音(C=0), minor, scale: 主音からの半音の並び }
+    key() {
+      if (!song) return { pc: 9, minor: true, scale: MINOR };
+      const k = songKey(song), sh = (section().t || 0) + (climaxOn ? 2 : 0);
+      return { pc: ((k.pc + sh) % 12 + 12) % 12, minor: k.minor, scale: k.scale };
+    },
+    // 次の16分音符の時刻(描く音の音程をリズムにそろえる)。曲が止まっていれば 0
+    gridT() { return song && timer != null ? nextT : 0; },
+    _songKey: songKey,
   };
 })();
 
