@@ -5,10 +5,11 @@ const anyStub = new Proxy(function(){}, {
   apply: () => anyStub,
 });
 const ctxStub = new Proxy({}, { get: (t,p) => {
+  if (p in t) return t[p];                    // 上書きされたもの(文字を訳す fillText など)
   if (p === 'canvas') return {};
   if (p === 'measureText') return (txt) => ({ width: String(txt).length * 7 });
   return typeof p === 'string' ? (() => anyStub) : undefined;
-}, set: () => true });
+}, set: (t, p, v) => { if (typeof v === 'function') t[p] = v; return true; } });
 const elStub = () => ({
   addEventListener(){}, getContext(){ return ctxStub; },
   style:{}, offsetHeight:0, width:0, height:0,

@@ -93,7 +93,7 @@ settings.diff = 'NORMAL';
 adjustOpt(1);
 assert('難易度がHARDへ巡回', settings.diff === 'HARD', settings.diff);
 settings.diff = 'NORMAL';
-optSel = 0; settings.bgm = 6; adjustOpt(1);
+optSel = OPT_ITEMS.findIndex(o => o.k === 'bgm'); settings.bgm = 6; adjustOpt(1);
 assert('BGM音量+1', settings.bgm === 7, settings.bgm);
 
 // ---- 12) BGM(AudioContext無しでも安全) ----
@@ -1585,6 +1585,24 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   err = null; try { render(); } catch (e) { err = e.stack; }
   assert('対戦の設定でも切りかえられる', settings.fillRule === 'SMALL' && !err, err);
   settings.numerin = 'ON'; settings.fillRule = 'SMALL'; settings.stageSel = 'TOUR';
+}
+
+// ---- 114) 日本語 / English ----
+{
+  const lang0 = settings.lang;
+  settings.lang = 'JA';
+  assert('日本語のときは訳さない', tr('ナワバリバトル') === 'ナワバリバトル');
+  setState('options'); optSel = OPT_ITEMS.findIndex(o => o.k === 'lang'); adjustOpt(1);
+  assert('OPTIONS で English に', settings.lang === 'EN');
+  assert('言葉をそのまま訳す', tr('ナワバリバトル') === 'Turf Battle' && tr('そもさん!') === 'Riddle me this!');
+  assert('つなげた文字も部分ごとに訳す', tr('アオ ダウン! +800') === 'Blue down! +800' && tr('ミドリが逆転!') === 'Green takes the lead!');
+  assert('数字の形: 順位・秒・ラスト', tr('3位/5人') === '#3 / 5' && tr('ラスト10秒!') === 'Last 10 seconds!' && tr('90秒') === '90s', tr('3位/5人') + ' | ' + tr('ラスト10秒!'));
+  assert('実績の名前と説明も英語', ACHV.every(a => !JA_RE.test(tr(a.name)) && !JA_RE.test(tr(a.txt))));
+  assert('ステージの名前も英語', Object.keys(CONFIG.SURF).every(k => !JA_RE.test(tr(CONFIG.SURF[k].label))));
+  assert('セリフも英語', Object.values(RIVAL_LINES).flat().concat(BANTER.flat()).every(t => !JA_RE.test(tr(t))));
+  let err = null; try { for (const st of ['title', 'options', 'help', 'vssetup', 'matchopts', 'achv', 'stats']) { setState(st); render(); } } catch (e) { err = e.stack; }
+  assert('英語で各画面を描ける', !err, err);
+  settings.lang = 'JA';
 }
 
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
