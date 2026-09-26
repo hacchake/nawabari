@@ -2886,6 +2886,7 @@ function inkHex() {
 }
 // 描いている線の色。INK ではローラー・線・塗る色はいつも同じ(速い線も色は変えない)
 function trailHex(fast) {
+  if (isVS()) return teamHex(0);                     // ナワバリバトル: 線もローラーもチームの色(CPU と同じ)
   const t = theme();
   if (!inkMode() && !inkRainbow()) return fast ? t.trailF : t.trailS;
   return inkHex();
@@ -6097,7 +6098,7 @@ function drawRoller(p, s, t) {
     const q = surf.screenOf(player.prev), l = Math.hypot(p.x - q.x, p.y - q.y);
     if (l > 0.5 && l < 60) { dx = (p.x - q.x) / l; dy = (p.y - q.y) / l; }
   }
-  const col = player.drawing ? trailHex(player.usedFast) : (inkMode() || inkRainbow()) ? inkHex() : '#c9c2b6';   // ローラー = 次に塗る色
+  const col = player.drawing || isVS() ? trailHex(player.usedFast) : (inkMode() || inkRainbow()) ? inkHex() : '#c9c2b6';   // ローラー = 次に塗る色(ナワバリバトルはいつもチームの色)
   const rx = p.x + dx * 7 * s, ry = p.y + dy * 7 * s;   // ローラーの中心
   const px = -dy, py = dx, half = 5.5 * s;               // ローラーの軸(進む向きに直角)
   ctx.lineCap = 'round';
@@ -6858,7 +6859,7 @@ function render3D(t) {
   order.length = 0;
   const nor = S.nor, nc = S.nc, par = S.par, P = S.pos, now = blinkT;
   const sealed = state === 'clear';
-  const trailCi = player.usedFast ? 4 : 5;
+  const trailCi = isVS() ? TEAMC_CI0 : player.usedFast ? 4 : 5;   // ナワバリバトル: 描きかけの線のマスもチームの色
   for (let c = 0; c < S.N; c++) {
     const nx = nor[c * 3], ny = nor[c * 3 + 1], nz = nor[c * 3 + 2];
     // 表向き判定: 法線・(カメラ位置 − セル位置) > 0
