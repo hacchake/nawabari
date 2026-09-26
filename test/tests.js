@@ -1630,5 +1630,20 @@ for (const mode of ['SPHERE', 'CUBE', 'TORUS', 'KLEIN']) {
   Bgm.stop();
 }
 
+// ---- 116) 描いている線とローラーの色がそろう(どのテーマでも) ----
+{
+  settings.mode = 'VS'; const th0 = settings.theme, bad = [];
+  for (let th = 0; th <= THEMES.length; th++) {
+    settings.theme = th;
+    for (const sk of ['PLANE', 'CUBE']) {
+      settings.stageSel = sk; startGame(); setState('play');
+      for (const fast of [false, true]) { player.usedFast = fast; if (trailHex(fast) !== teamHex(0) || inkHex() !== teamHex(0)) bad.push(th + ':' + sk + ':' + fast + ':' + trailHex(fast)); }
+      let err = null; try { player.drawing = true; render(); player.drawing = false; render(); } catch (e) { err = e.stack; } if (err) bad.push(err);
+    }
+  }
+  assert('線・ローラー・しずくはいつもチームの色(全テーマ)', bad.length === 0, bad.slice(0, 4).join(' '));
+  settings.theme = th0; settings.stageSel = 'TOUR'; player.usedFast = false;
+}
+
 console.log(fails === 0 ? '\n=== 全テスト合格 ===' : '\n=== 失敗 ' + fails + ' 件 ===');
 process.exit(fails === 0 ? 0 : 1);
