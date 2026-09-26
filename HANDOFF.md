@@ -78,6 +78,12 @@ QLAIM 2(`C:\Users\sisho\Desktop\qlaim2`、GitHub `hacchake/qlaim2`)は機能が�
 - 決着前10秒の BGM の盛り上げ(`Bgm.climax`: 小節の頭で全音上へ転調・テンポ1.1倍)、逆転の知らせ(`checkLeader`)、順位バーがすべる(`hudAnim`)
 - 結果画面のタイムラプス(`lapse` / `startLapse`。1秒ごとの差分を記録、勝った試合はギャラリーに16枚つける)
 
+- (2026-09-26)タイムラプスに順位バーと推移グラフ・再生中も立体を回せる。タイトルを最小限(説明はあそびかたへ)。足もとの光・つや・ビネット・立体の後光
+- 陣地が確定したときの演出(`claimFx`、広さで3段階。帯 `fxBanner`・スロー `slowMoT`・花火 `fwQueue`・アルペジオ `Snd.fanfare`)
+- ナワバリバトルは「狭いほう」を塗る(`keepCell`)。設定「塗れる側」(`settings.fillRule`: SMALL / QIX)。閉じこめられたヌメリンは `rescueQixes`
+- 英語 / 日本語(`settings.lang`、辞書 `I18N_EN`、`tr()`。ctx.fillText の入り口で訳す)。文字を足したら辞書にも足す
+- BGM 3曲追加(battle / neon / matsuri)。曲の調 `Bgm.key()`(自動判定 or 曲の key/scale)。描く音は調の和音・16分にそろえる(`voiceHz`・`onGrid`)
+
 ### 次にやること(候補)
 - 中身の整理の残り: エンジンの中に TOUR / 単独盤面 の分岐(`settings.mode` が 'PLANE' などのとき)、ひとり用の `startClear` の流れ、
   インクの MIX/虹(`settings.ink`、`applyPattern`)が残っている。テストがこれらを使っているので、テストを VS に書き換えながら消す
